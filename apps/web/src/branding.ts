@@ -1,5 +1,7 @@
 import type { DesktopAppBranding } from "@t3tools/contracts";
 
+export const IS_CONTENT_STUDIO = import.meta.env.VITE_CONTENT_STUDIO === "true";
+
 function readInjectedDesktopAppBranding(): DesktopAppBranding | null {
   if (typeof window === "undefined") {
     return null;
@@ -10,7 +12,9 @@ function readInjectedDesktopAppBranding(): DesktopAppBranding | null {
 
 const injectedDesktopAppBranding = readInjectedDesktopAppBranding();
 
-export const APP_BASE_NAME = injectedDesktopAppBranding?.baseName ?? "T3 Code";
+const DEFAULT_BASE_NAME = IS_CONTENT_STUDIO ? "Content Studio" : "T3 Code";
+
+export const APP_BASE_NAME = injectedDesktopAppBranding?.baseName ?? DEFAULT_BASE_NAME;
 export const APP_STAGE_LABEL =
   injectedDesktopAppBranding?.stageLabel ?? (import.meta.env.DEV ? "Dev" : "Alpha");
 export const APP_DISPLAY_NAME =

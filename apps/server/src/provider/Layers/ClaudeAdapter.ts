@@ -553,6 +553,50 @@ const CLAUDE_SETTING_SOURCES = [
   "local",
 ] as const satisfies ReadonlyArray<SettingSource>;
 
+// --- Content Studio integration ---
+const IS_CONTENT_STUDIO = process.env.VITE_CONTENT_STUDIO === "true";
+const CONTENT_EDITOR_URL = process.env.CONTENT_EDITOR_URL ?? "http://localhost:55279";
+const CONTENT_MANIFEST_PATH = process.env.CONTENT_MANIFEST_PATH ?? "";
+
+function loadContentStudioSystemPrompt(): string | undefined {
+  if (!IS_CONTENT_STUDIO) return undefined;
+  try {
+    const NFS = require("node:fs") as typeof import("node:fs");
+    const NPath = require("node:path") as typeof import("node:path");
+    const studioRoot = NPath.resolve(__dirname, "../../../../..");
+    const promptPath = NPath.resolve(studioRoot, "spectoda/system-prompt.md");
+    if (NFS.existsSync(promptPath)) {
+      return NFS.readFileSync(promptPath, "utf-8");
+    }
+  } catch {
+    // System prompt is optional
+  }
+  return undefined;
+}
+
+function buildContentStudioMcpServers():
+  | Record<string, { command: string; args: string[]; env?: Record<string, string> }>
+  | undefined {
+  if (!IS_CONTENT_STUDIO) return undefined;
+  try {
+    const NPath = require("node:path") as typeof import("node:path");
+    const studioRoot = NPath.resolve(__dirname, "../../../../..");
+    const mcpServerPath = NPath.resolve(studioRoot, "spectoda/tools/content-mcp-server.ts");
+    return {
+      "content-studio-tools": {
+        command: "bun",
+        args: ["run", mcpServerPath],
+        env: {
+          CONTENT_EDITOR_URL,
+          CONTENT_MANIFEST_PATH,
+        },
+      },
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 function buildPromptText(input: ProviderSendTurnInput): string {
   const rawEffort =
     input.modelSelection?.provider === "claudeAgent" ? input.modelSelection.options?.effort : null;
@@ -2843,6 +2887,10 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...(fastMode ? { fastMode: true } : {}),
       };
 
+      // Content Studio: inject system prompt and MCP tools
+      const contentStudioSystemPrompt = loadContentStudioSystemPrompt();
+      const contentStudioMcpServers = buildContentStudioMcpServers();
+
       const queryOptions: ClaudeQueryOptions = {
         ...(input.cwd ? { cwd: input.cwd } : {}),
         ...(apiModelId ? { model: apiModelId } : {}),
@@ -2866,6 +2914,8 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         canUseTool,
         env: process.env,
         ...(input.cwd ? { additionalDirectories: [input.cwd] } : {}),
+        ...(contentStudioSystemPrompt ? { systemPrompt: contentStudioSystemPrompt } : {}),
+        ...(contentStudioMcpServers ? { mcpServers: contentStudioMcpServers } : {}),
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
       };
 

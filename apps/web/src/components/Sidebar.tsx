@@ -82,6 +82,7 @@ import {
 } from "../keybindings";
 import { useGitStatus } from "../lib/gitStatusState";
 import { readLocalApi } from "../localApi";
+import { IS_CONTENT_STUDIO } from "../branding";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { retainThreadDetailSubscription } from "../environments/runtime/service";
@@ -559,7 +560,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         onContextMenu={handleRowContextMenu}
       >
         <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-          {prStatus && (
+          {!IS_CONTENT_STUDIO && prStatus && (
             <Tooltip>
               <TooltipTrigger
                 render={

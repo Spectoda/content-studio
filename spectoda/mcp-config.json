@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "content-studio-tools": {
+      "command": "bun",
+      "args": ["run", "./spectoda/tools/content-mcp-server.ts"],
+      "env": {
+        "CONTENT_EDITOR_URL": "http://localhost:55279",
+        "CONTENT_MANIFEST_PATH": "../app/v1/generated/content-manifest.json"
+      }
+    }
+  }
+}

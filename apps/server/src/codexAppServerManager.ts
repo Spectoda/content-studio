@@ -337,6 +337,28 @@ export function normalizeCodexModelSlug(
   return normalized;
 }
 
+// --- Content Studio: Codex developer instructions supplement ---
+const IS_CONTENT_STUDIO = process.env.VITE_CONTENT_STUDIO === "true";
+
+function loadContentStudioCodexInstructions(): string {
+  if (!IS_CONTENT_STUDIO) return "";
+  try {
+    const NFS = require("node:fs") as typeof import("node:fs");
+    const NPath = require("node:path") as typeof import("node:path");
+    const studioRoot = NPath.resolve(__dirname, "../..");
+    const promptPath = NPath.resolve(studioRoot, "spectoda/system-prompt.md");
+    if (NFS.existsSync(promptPath)) {
+      const content = NFS.readFileSync(promptPath, "utf-8");
+      return `\n\n<content_studio_context>\n${content}\n</content_studio_context>`;
+    }
+  } catch {
+    // Optional
+  }
+  return "";
+}
+
+const CONTENT_STUDIO_CODEX_SUPPLEMENT = loadContentStudioCodexInstructions();
+
 function buildCodexCollaborationMode(input: {
   readonly interactionMode?: "default" | "plan";
   readonly model?: string;
@@ -355,15 +377,16 @@ function buildCodexCollaborationMode(input: {
     return undefined;
   }
   const model = normalizeCodexModelSlug(input.model) ?? "gpt-5.3-codex";
+  const baseInstructions =
+    input.interactionMode === "plan"
+      ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
+      : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS;
   return {
     mode: input.interactionMode,
     settings: {
       model,
       reasoning_effort: input.effort ?? "medium",
-      developer_instructions:
-        input.interactionMode === "plan"
-          ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
-          : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+      developer_instructions: baseInstructions + CONTENT_STUDIO_CODEX_SUPPLEMENT,
     },
   };
 }

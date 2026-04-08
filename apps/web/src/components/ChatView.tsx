@@ -96,6 +96,7 @@ import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import { BranchToolbar } from "./BranchToolbar";
+import { IS_CONTENT_STUDIO } from "../branding";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
@@ -3369,7 +3370,7 @@ export default function ChatView(props: ChatViewProps) {
             />
           </div>
 
-          {isGitRepo && (
+          {!IS_CONTENT_STUDIO && isGitRepo && (
             <BranchToolbar
               environmentId={activeThread.environmentId}
               threadId={activeThread.id}
@@ -3395,7 +3396,7 @@ export default function ChatView(props: ChatViewProps) {
                 : {})}
             />
           )}
-          {pullRequestDialogState ? (
+          {!IS_CONTENT_STUDIO && pullRequestDialogState ? (
             <PullRequestThreadDialog
               key={pullRequestDialogState.key}
               open
@@ -3428,6 +3429,8 @@ export default function ChatView(props: ChatViewProps) {
             onClose={closePlanSidebar}
           />
         ) : null}
+
+        {/* Draft inspector moved to Campaign Workspace view. */}
       </div>
       {/* end horizontal flex container */}
 
