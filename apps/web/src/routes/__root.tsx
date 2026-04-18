@@ -10,7 +10,7 @@ import {
 import { useEffect, useEffectEvent, useRef } from "react";
 import { QueryClient, useQueryClient } from "@tanstack/react-query";
 
-import { APP_DISPLAY_NAME } from "../branding";
+import { APP_DISPLAY_NAME, IS_CONTENT_STUDIO } from "../branding";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import {
@@ -231,6 +231,10 @@ function EventRouter() {
       }
 
       if (!payload.bootstrapProjectId || !payload.bootstrapThreadId) {
+        return;
+      }
+      if (IS_CONTENT_STUDIO) {
+        // Content Studio is campaign-first — never auto-navigate into a thread.
         return;
       }
       const bootstrapEnvironmentState =

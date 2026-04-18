@@ -1,6 +1,8 @@
 import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
+import { IS_CONTENT_STUDIO } from "../branding";
+import { CampaignSidebar } from "./CampaignSidebar";
 import ThreadSidebar from "./Sidebar";
 import { Sidebar, SidebarProvider, SidebarRail } from "./ui/sidebar";
 
@@ -40,7 +42,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           storageKey: THREAD_SIDEBAR_WIDTH_STORAGE_KEY,
         }}
       >
-        <ThreadSidebar />
+        {IS_CONTENT_STUDIO ? <CampaignSidebar /> : <ThreadSidebar />}
         <SidebarRail />
       </Sidebar>
       {children}
