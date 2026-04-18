@@ -18,6 +18,8 @@ import { Route as SettingsConnectionsRouteImport } from './routes/settings.conne
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
+import { Route as ChatCampaignsCampaignIdIndexRouteImport } from './routes/_chat.campaigns.$campaignId.index'
+import { Route as ChatCampaignsCampaignIdChannelRouteImport } from './routes/_chat.campaigns.$campaignId.$channel'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -64,6 +66,18 @@ const ChatEnvironmentIdThreadIdRoute =
     path: '/$environmentId/$threadId',
     getParentRoute: () => ChatRoute,
   } as any)
+const ChatCampaignsCampaignIdIndexRoute =
+  ChatCampaignsCampaignIdIndexRouteImport.update({
+    id: '/campaigns/$campaignId/',
+    path: '/campaigns/$campaignId/',
+    getParentRoute: () => ChatRoute,
+  } as any)
+const ChatCampaignsCampaignIdChannelRoute =
+  ChatCampaignsCampaignIdChannelRouteImport.update({
+    id: '/campaigns/$campaignId/$channel',
+    path: '/campaigns/$campaignId/$channel',
+    getParentRoute: () => ChatRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
@@ -74,6 +88,8 @@ export interface FileRoutesByFullPath {
   '/settings/general': typeof SettingsGeneralRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/campaigns/$campaignId/$channel': typeof ChatCampaignsCampaignIdChannelRoute
+  '/campaigns/$campaignId/': typeof ChatCampaignsCampaignIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/pair': typeof PairRoute
@@ -84,6 +100,8 @@ export interface FileRoutesByTo {
   '/': typeof ChatIndexRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/campaigns/$campaignId/$channel': typeof ChatCampaignsCampaignIdChannelRoute
+  '/campaigns/$campaignId': typeof ChatCampaignsCampaignIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -96,6 +114,8 @@ export interface FileRoutesById {
   '/_chat/': typeof ChatIndexRoute
   '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/_chat/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/_chat/campaigns/$campaignId/$channel': typeof ChatCampaignsCampaignIdChannelRoute
+  '/_chat/campaigns/$campaignId/': typeof ChatCampaignsCampaignIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -108,6 +128,8 @@ export interface FileRouteTypes {
     | '/settings/general'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
+    | '/campaigns/$campaignId/$channel'
+    | '/campaigns/$campaignId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/pair'
@@ -118,6 +140,8 @@ export interface FileRouteTypes {
     | '/'
     | '/$environmentId/$threadId'
     | '/draft/$draftId'
+    | '/campaigns/$campaignId/$channel'
+    | '/campaigns/$campaignId'
   id:
     | '__root__'
     | '/_chat'
@@ -129,6 +153,8 @@ export interface FileRouteTypes {
     | '/_chat/'
     | '/_chat/$environmentId/$threadId'
     | '/_chat/draft/$draftId'
+    | '/_chat/campaigns/$campaignId/$channel'
+    | '/_chat/campaigns/$campaignId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -202,6 +228,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatEnvironmentIdThreadIdRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/campaigns/$campaignId/': {
+      id: '/_chat/campaigns/$campaignId/'
+      path: '/campaigns/$campaignId'
+      fullPath: '/campaigns/$campaignId/'
+      preLoaderRoute: typeof ChatCampaignsCampaignIdIndexRouteImport
+      parentRoute: typeof ChatRoute
+    }
+    '/_chat/campaigns/$campaignId/$channel': {
+      id: '/_chat/campaigns/$campaignId/$channel'
+      path: '/campaigns/$campaignId/$channel'
+      fullPath: '/campaigns/$campaignId/$channel'
+      preLoaderRoute: typeof ChatCampaignsCampaignIdChannelRouteImport
+      parentRoute: typeof ChatRoute
+    }
   }
 }
 
@@ -209,12 +249,16 @@ interface ChatRouteChildren {
   ChatIndexRoute: typeof ChatIndexRoute
   ChatEnvironmentIdThreadIdRoute: typeof ChatEnvironmentIdThreadIdRoute
   ChatDraftDraftIdRoute: typeof ChatDraftDraftIdRoute
+  ChatCampaignsCampaignIdChannelRoute: typeof ChatCampaignsCampaignIdChannelRoute
+  ChatCampaignsCampaignIdIndexRoute: typeof ChatCampaignsCampaignIdIndexRoute
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
   ChatIndexRoute: ChatIndexRoute,
   ChatEnvironmentIdThreadIdRoute: ChatEnvironmentIdThreadIdRoute,
   ChatDraftDraftIdRoute: ChatDraftDraftIdRoute,
+  ChatCampaignsCampaignIdChannelRoute: ChatCampaignsCampaignIdChannelRoute,
+  ChatCampaignsCampaignIdIndexRoute: ChatCampaignsCampaignIdIndexRoute,
 }
 
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
