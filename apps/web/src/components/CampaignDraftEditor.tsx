@@ -297,9 +297,9 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <section className="flex min-h-0 min-w-0 flex-col overflow-y-auto border-border/70 px-6 py-5 lg:border-r">
-          <div className="mb-2 flex items-center justify-between">
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden border-border/70 px-6 py-5 lg:border-r">
+          <div className="mb-2 flex shrink-0 items-center justify-between">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Draft body (markdown)
             </h2>
@@ -313,11 +313,11 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
               setEditorValue(event.target.value);
               setLocalDirty(event.target.value !== draft.body);
             }}
-            className="min-h-[280px] flex-1 resize-none font-mono text-[13px] leading-6"
+            className="min-h-[200px] flex-1 resize-none font-mono text-[13px] leading-6"
             placeholder="The AI draft will stream in here. You can edit freely — manual edits stop the AI from overwriting this copy."
           />
 
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <div className="mt-3 flex shrink-0 flex-wrap items-center gap-1.5">
             <Button size="sm" variant="default" onClick={handleSaveBody} disabled={!localDirty}>
               Save as draft
             </Button>
@@ -336,15 +336,15 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
           </div>
 
           {draft.bodyIsManuallyEdited && (
-            <p className="mt-2 text-[11px] text-amber-600">
+            <p className="mt-2 shrink-0 text-[11px] text-amber-600">
               This draft is manually edited. Future AI completions won't overwrite it until you
               revert or regenerate.
             </p>
           )}
         </section>
 
-        <section className="flex min-h-0 min-w-0 flex-col overflow-y-auto px-6 py-5">
-          <div className="mb-2 flex items-center justify-between">
+        <section className="flex min-h-0 min-w-0 flex-col px-6 py-5">
+          <div className="mb-2 flex shrink-0 items-center justify-between">
             <h2 className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <SparklesIcon className="size-3 text-sky-500" />
               AI working copy
@@ -363,7 +363,7 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
             )}
           </div>
 
-          <div className="min-h-[200px] flex-1 whitespace-pre-wrap rounded-xl border border-border/70 bg-card/60 p-4 text-[13px] leading-6 text-foreground/90">
+          <div className="min-h-[200px] min-w-0 flex-1 overflow-y-auto overscroll-contain whitespace-pre-wrap rounded-xl border border-border/70 bg-card/60 p-4 text-[13px] leading-6 text-foreground/90">
             {latestAssistantText.trim().length === 0 ? (
               <p className="italic text-muted-foreground">
                 The provider hasn't responded yet. Regenerate below or add feedback to nudge it.
@@ -373,7 +373,7 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
             )}
           </div>
 
-          <div className="mt-4 space-y-2 rounded-xl border border-border/70 bg-background/60 p-3">
+          <div className="mt-4 shrink-0 space-y-2 rounded-xl border border-border/70 bg-background/60 p-3">
             <label htmlFor="draft-feedback" className="text-[11px] font-semibold">
               Feedback / follow up
             </label>
