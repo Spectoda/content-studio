@@ -125,6 +125,12 @@ const webProc = Bun.spawn([bunPath, "run", "vite", "--port", String(WEB_PORT), "
     ...process.env,
     VITE_CONTENT_STUDIO: "true",
     VITE_WS_URL: `ws://localhost:${SERVER_PORT}/ws`,
+    // Route HTTP requests through Vite's own origin so `/api/*` hits the dev
+    // proxy (configured in vite.config.ts) instead of going cross-origin to the
+    // server on SERVER_PORT — the server uses `Access-Control-Allow-Origin: *`
+    // which browsers reject on credentialed fetches. See resolveHttpRequestBaseUrl
+    // in apps/web/src/environments/primary/target.ts.
+    VITE_DEV_SERVER_URL: `http://localhost:${WEB_PORT}`,
     VITE_LAUNCHPAD_URL: `http://localhost:${process.env.LAUNCHPAD_PORT ?? "8888"}`,
     VITE_WORKSPACE_ROOT: workspaceRoot,
     PORT: String(WEB_PORT),
