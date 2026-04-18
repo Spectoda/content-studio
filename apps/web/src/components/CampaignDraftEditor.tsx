@@ -486,7 +486,11 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
                 onClick={() => void handleRegenerate()}
                 disabled={regenerating}
               >
-                <RefreshCwIcon className="size-3" />
+                {regenerating ? (
+                  <Loader2Icon className="size-3 animate-spin" />
+                ) : (
+                  <RefreshCwIcon className="size-3" />
+                )}
                 {regenerating
                   ? "Regenerating…"
                   : feedback.trim().length > 0

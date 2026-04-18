@@ -134,10 +134,22 @@ function DraftCard({
           className="gap-1"
           onClick={onRegenerate}
           disabled={isGenerating}
-          title={campaign.name}
+          title={
+            isGenerating
+              ? "AI is generating a fresh draft — this usually finishes within 20–60 seconds."
+              : "Ask the AI for a new version of this draft. Previous text is replaced."
+          }
         >
-          <RefreshCwIcon className="size-3" />
-          {draft.body.trim().length === 0 ? "Generate" : "Regenerate"}
+          {isGenerating ? (
+            <Loader2Icon className="size-3 animate-spin" />
+          ) : (
+            <RefreshCwIcon className="size-3" />
+          )}
+          {isGenerating
+            ? "Regenerating…"
+            : draft.threadRef
+              ? "Regenerate"
+              : "Generate"}
         </Button>
         {draft.status !== "approved" ? (
           <Button size="sm" variant="ghost" className="gap-1" onClick={onApprove}>
