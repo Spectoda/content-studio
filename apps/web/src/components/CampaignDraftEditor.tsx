@@ -17,6 +17,7 @@ import {
   ArrowLeftIcon,
   CheckCircle2Icon,
   ClipboardCopyIcon,
+  InfoIcon,
   Loader2Icon,
   RefreshCwIcon,
   SendIcon,
@@ -65,6 +66,96 @@ function DraftStatusBadge({ status }: { status: DraftOutput["status"] }) {
     <Badge variant="outline" className={`text-[10px] ${className}`}>
       {DRAFT_STATUS_LABEL[status]}
     </Badge>
+  );
+}
+
+function formatModelSelection(
+  selection: import("../campaignStore").Campaign["modelSelection"] | undefined,
+): string {
+  if (!selection) return "—";
+  const provider = selection.provider;
+  const model = selection.model;
+  const opts = (selection.options ?? {}) as Record<string, unknown>;
+  const parts: string[] = [];
+  if (typeof opts.reasoningEffort === "string") parts.push(opts.reasoningEffort);
+  if (typeof opts.effort === "string") parts.push(opts.effort);
+  if (opts.fastMode === true) parts.push("fast");
+  if (opts.thinking === true) parts.push("thinking");
+  return `${provider}/${model}${parts.length > 0 ? ` · ${parts.join(" · ")}` : ""}`;
+}
+
+function formatTimestamp(value: string | undefined): string {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
+function DraftTechnicalInfo({
+  campaign,
+  draft,
+}: {
+  campaign: import("../campaignStore").Campaign;
+  draft: DraftOutput;
+}) {
+  const rows = useMemo<Array<[string, string]>>(
+    () => [
+      ["Draft ID", draft.id],
+      ["Channel", draft.channel],
+      ["Status", draft.status],
+      ["Last updated", formatTimestamp(draft.updatedAt)],
+      ["Thread ID", draft.threadRef?.threadId ?? "(not started)"],
+      ["Environment", draft.threadRef?.environmentId ?? campaign.environmentId ?? "—"],
+      ["Model", formatModelSelection(campaign.modelSelection)],
+      ["Project", campaign.projectName ?? campaign.projectId ?? "—"],
+      ["Project cwd", campaign.projectCwd ?? "—"],
+      ["Manually edited", draft.bodyIsManuallyEdited ? "yes" : "no"],
+    ],
+    [campaign, draft],
+  );
+
+  const copyToClipboard = useCallback(() => {
+    const text = [`Campaign: ${campaign.name} (${campaign.id})`, ...rows.map(([k, v]) => `${k}: ${v}`)].join("\n");
+    void navigator.clipboard.writeText(text).then(() => {
+      toastManager.add({ type: "success", title: "Thread info copied to clipboard" });
+    });
+  }, [rows, campaign.id, campaign.name]);
+
+  return (
+    <details className="group border-b border-border/70 bg-background/40 text-[12px]">
+      <summary className="flex cursor-pointer select-none items-center gap-2 px-6 py-2 text-muted-foreground transition-colors hover:text-foreground">
+        <InfoIcon className="size-3.5" />
+        <span className="font-medium">Thread info</span>
+        <span className="text-[10px] font-normal opacity-70">
+          (share this with engineering when something looks wrong)
+        </span>
+      </summary>
+      <div className="grid gap-x-6 gap-y-1 px-6 pb-3 pt-1 md:grid-cols-2">
+        {rows.map(([key, value]) => (
+          <div key={key} className="flex items-baseline gap-2">
+            <span className="w-32 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {key}
+            </span>
+            <span className="select-text break-all font-mono text-[11.5px] text-foreground/90">
+              {value}
+            </span>
+          </div>
+        ))}
+        <div className="md:col-span-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2 gap-1"
+            onClick={copyToClipboard}
+          >
+            <ClipboardCopyIcon className="size-3" />
+            Copy info
+          </Button>
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -296,6 +387,8 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
           )}
         </div>
       </div>
+
+      <DraftTechnicalInfo campaign={campaign} draft={draft} />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
         <section className="flex min-h-0 min-w-0 flex-col overflow-hidden border-border/70 px-6 py-5 lg:border-r">

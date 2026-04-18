@@ -11,6 +11,8 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpRightIcon,
   CheckCircle2Icon,
+  ClipboardCopyIcon,
+  InfoIcon,
   Loader2Icon,
   RefreshCwIcon,
   SparklesIcon,
@@ -149,6 +151,105 @@ function DraftCard({
         )}
       </footer>
     </article>
+  );
+}
+
+function formatModelSelection(selection: Campaign["modelSelection"] | undefined): string {
+  if (!selection) return "—";
+  const provider = selection.provider;
+  const model = selection.model;
+  // ModelSelection is a discriminated union — each provider has its own
+  // option shape. Read opts through `unknown` + property check so we can
+  // format the common knobs without a mega switch that needs updating
+  // whenever upstream adds a provider.
+  const opts = (selection.options ?? {}) as Record<string, unknown>;
+  const parts: string[] = [];
+  if (typeof opts.reasoningEffort === "string") parts.push(opts.reasoningEffort);
+  if (typeof opts.effort === "string") parts.push(opts.effort);
+  if (opts.fastMode === true) parts.push("fast");
+  if (opts.thinking === true) parts.push("thinking");
+  return `${provider}/${model}${parts.length > 0 ? ` · ${parts.join(" · ")}` : ""}`;
+}
+
+function formatTimestamp(value: string | undefined): string {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
+function CampaignTechnicalInfo({ campaign }: { campaign: Campaign }) {
+  const rows = useMemo<Array<[string, string]>>(() => {
+    const drafts = campaign.drafts;
+    const threadsWithRef = drafts.filter((d) => d.threadRef);
+    return [
+      ["Campaign ID", campaign.id],
+      ["Status", campaign.status],
+      ["Created", formatTimestamp(campaign.createdAt)],
+      ["Last updated", formatTimestamp(campaign.updatedAt)],
+      ["Environment", campaign.environmentId ?? "—"],
+      ["Project", campaign.projectName ?? campaign.projectId ?? "—"],
+      ["Project cwd", campaign.projectCwd ?? "—"],
+      ["Default model", formatModelSelection(campaign.modelSelection)],
+      ["Drafts", `${drafts.length} (${threadsWithRef.length} with threads)`],
+    ];
+  }, [campaign]);
+
+  const copyToClipboard = useCallback(() => {
+    const text = rows.map(([k, v]) => `${k}: ${v}`).join("\n");
+    void navigator.clipboard.writeText(text).then(() => {
+      toastManager.add({ type: "success", title: "Technical info copied to clipboard" });
+    });
+  }, [rows]);
+
+  return (
+    <details className="group rounded-xl border border-border/70 bg-background/40 text-[12px]">
+      <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-muted-foreground transition-colors hover:text-foreground">
+        <InfoIcon className="size-3.5" />
+        <span className="font-medium">Technical info</span>
+        <span className="text-[10px] font-normal opacity-70">
+          (useful when troubleshooting with engineering)
+        </span>
+      </summary>
+      <div className="border-t border-border/70 px-3 pb-3 pt-2">
+        <dl className="grid grid-cols-[minmax(120px,max-content)_1fr] gap-x-4 gap-y-1.5">
+          {rows.map(([key, value]) => (
+            <div key={key} className="contents">
+              <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {key}
+              </dt>
+              <dd className="select-text break-all font-mono text-[11.5px] text-foreground/90">
+                {value}
+              </dd>
+            </div>
+          ))}
+          <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Thread IDs
+          </dt>
+          <dd className="space-y-0.5 font-mono text-[11px] text-foreground/80">
+            {campaign.drafts.map((draft) => (
+              <div key={draft.id} className="truncate">
+                <span className="inline-block w-20 opacity-70">{draft.channel}</span>
+                <span className="select-text break-all">
+                  {draft.threadRef?.threadId ?? "—"}
+                </span>
+              </div>
+            ))}
+          </dd>
+        </dl>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-3 gap-1"
+          onClick={copyToClipboard}
+        >
+          <ClipboardCopyIcon className="size-3" />
+          Copy info
+        </Button>
+      </div>
+    </details>
   );
 }
 
@@ -298,6 +399,8 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
               <p className="mt-1 whitespace-pre-wrap">{campaign.workingPrompt}</p>
             </div>
           )}
+
+          <CampaignTechnicalInfo campaign={campaign} />
         </section>
 
         <section>

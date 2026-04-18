@@ -19,7 +19,7 @@ import { usePrimaryEnvironmentId } from "../environments/primary";
 import { resolveAppModelSelectionState } from "../modelSelection";
 import { useServerProviders } from "../rpc/serverState";
 import { useSettings } from "../hooks/useSettings";
-import { selectProjectsForEnvironment, useStore } from "../store";
+import { selectProjectByRef, selectProjectsForEnvironment, useStore } from "../store";
 import { useUiStateStore } from "../uiStateStore";
 import { Button } from "./ui/button";
 import { toastManager } from "./ui/toast";
@@ -85,6 +85,13 @@ export function CampaignCreateForm({ variant = "hero", onCreated }: CampaignCrea
 
     try {
       const modelSelection = resolveAppModelSelectionState(settings, providers);
+      // Resolve project display metadata at submit time so the campaign gets a
+      // troubleshooting snapshot of "which project / cwd ran this" that
+      // survives even if the project is renamed or removed later.
+      const project = selectProjectByRef(useStore.getState(), {
+        environmentId,
+        projectId: defaultProjectId,
+      });
       const { campaign, dispatchErrors } = await createCampaign({
         environmentId,
         name: trimmedName,
@@ -92,6 +99,8 @@ export function CampaignCreateForm({ variant = "hero", onCreated }: CampaignCrea
         workingPrompt: workingPrompt.trim(),
         selectedChannels,
         projectId: defaultProjectId,
+        ...(project?.name ? { projectName: project.name } : {}),
+        ...(project?.cwd ? { projectCwd: project.cwd } : {}),
         modelSelection,
       });
 

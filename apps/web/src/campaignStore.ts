@@ -13,7 +13,13 @@
  */
 
 import { create } from "zustand";
-import type { EnvironmentId, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  ModelSelection,
+  ProjectId,
+  ScopedThreadRef,
+  ThreadId,
+} from "@t3tools/contracts";
 
 import { type ChannelId } from "./campaignChannels";
 
@@ -44,6 +50,13 @@ export interface Campaign {
   createdAt: string;
   updatedAt: string;
   drafts: DraftOutput[];
+  // Troubleshooting snapshot — captured at creation so non-technical users can
+  // report "which model ran where" without digging through logs. Optional
+  // because campaigns persisted from earlier versions don't have these fields.
+  projectId?: ProjectId;
+  projectName?: string;
+  projectCwd?: string;
+  modelSelection?: ModelSelection;
 }
 
 export const CAMPAIGN_STATUS_LABEL: Record<CampaignStatus, string> = {

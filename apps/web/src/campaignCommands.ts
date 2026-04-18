@@ -121,6 +121,14 @@ export interface CreateCampaignInput {
   workingPrompt: string;
   selectedChannels: ChannelId[];
   projectId: ProjectId;
+  /**
+   * Display metadata for the project — captured on the caller side so
+   * CampaignWorkspace can later show the cwd/name in the "Technical info"
+   * panel without re-resolving the store (handy when the project is renamed
+   * or deleted after a campaign was created).
+   */
+  projectName?: string;
+  projectCwd?: string;
   modelSelection: ModelSelection;
   runtimeMode?: RuntimeMode;
   interactionMode?: ProviderInteractionMode;
@@ -171,6 +179,10 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Create
     createdAt: now,
     updatedAt: now,
     drafts,
+    projectId: input.projectId,
+    ...(input.projectName ? { projectName: input.projectName } : {}),
+    ...(input.projectCwd ? { projectCwd: input.projectCwd } : {}),
+    modelSelection: input.modelSelection,
   };
 
   useCampaignStore.getState().addCampaign(campaign);
