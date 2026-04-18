@@ -17,11 +17,14 @@ import {
   ArrowLeftIcon,
   CheckCircle2Icon,
   ClipboardCopyIcon,
+  EyeIcon,
   InfoIcon,
   Loader2Icon,
+  PencilIcon,
   RefreshCwIcon,
   SendIcon,
   SparklesIcon,
+  SplitIcon,
   UndoIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -45,11 +48,74 @@ import { useServerProviders } from "../rpc/serverState";
 import { selectProjectsForEnvironment, useStore } from "../store";
 import { createThreadSelectorByRef } from "../storeSelectors";
 import { useUiStateStore } from "../uiStateStore";
+import ChatMarkdown from "./ChatMarkdown";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { SidebarTrigger } from "./ui/sidebar";
 import { Textarea } from "./ui/textarea";
 import { toastManager } from "./ui/toast";
+
+type BodyViewMode = "edit" | "preview" | "split";
+
+const BODY_VIEW_MODE_STORAGE_KEY = "content-studio:draft-view-mode";
+
+function readInitialBodyViewMode(): BodyViewMode {
+  if (typeof localStorage === "undefined") return "edit";
+  const raw = localStorage.getItem(BODY_VIEW_MODE_STORAGE_KEY);
+  return raw === "edit" || raw === "preview" || raw === "split" ? raw : "edit";
+}
+
+function DraftBodyPreview({ body, cwd }: { body: string; cwd: string | undefined }) {
+  const trimmed = body.trim();
+  if (trimmed.length === 0) {
+    return (
+      <p className="text-[13px] italic leading-6 text-muted-foreground">
+        Nothing to preview yet — the AI draft will stream into the editor.
+      </p>
+    );
+  }
+  // ChatMarkdown already wraps itself in a `.chat-markdown` div that owns the
+  // blog-style typography rules in index.css, so we just pass the raw body
+  // through and let the shared stylesheet handle headings, lists, links, etc.
+  return <ChatMarkdown text={body} cwd={cwd} />;
+}
+
+function BodyViewModeToggle({
+  value,
+  onChange,
+}: {
+  value: BodyViewMode;
+  onChange: (mode: BodyViewMode) => void;
+}) {
+  const buttons: Array<{ mode: BodyViewMode; icon: typeof PencilIcon; label: string }> = [
+    { mode: "edit", icon: PencilIcon, label: "Edit" },
+    { mode: "preview", icon: EyeIcon, label: "Preview" },
+    { mode: "split", icon: SplitIcon, label: "Split" },
+  ];
+  return (
+    <div className="inline-flex items-center gap-0.5 rounded-md border border-border/70 bg-background/60 p-0.5">
+      {buttons.map(({ mode, icon: Icon, label }) => {
+        const active = mode === value;
+        return (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => onChange(mode)}
+            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+              active
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            title={label}
+          >
+            <Icon className="size-3" />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function DraftStatusBadge({ status }: { status: DraftOutput["status"] }) {
   const className =
@@ -210,6 +276,15 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
   const [localDirty, setLocalDirty] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [regenerating, setRegenerating] = useState(false);
+  const [bodyViewMode, setBodyViewMode] = useState<BodyViewMode>(readInitialBodyViewMode);
+  const handleBodyViewModeChange = useCallback((mode: BodyViewMode) => {
+    setBodyViewMode(mode);
+    try {
+      localStorage.setItem(BODY_VIEW_MODE_STORAGE_KEY, mode);
+    } catch {
+      // Storage unavailable; the session-scoped preference is still applied.
+    }
+  }, []);
 
   useEffect(() => {
     if (!draft) return;
@@ -392,23 +467,49 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
 
       <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
         <section className="flex min-h-0 min-w-0 flex-col overflow-hidden border-border/70 px-6 py-5 lg:border-r">
-          <div className="mb-2 flex shrink-0 items-center justify-between">
+          <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Draft body (markdown)
             </h2>
-            {localDirty && (
-              <span className="text-[10px] font-medium text-amber-600">Unsaved changes</span>
-            )}
+            <div className="flex items-center gap-2">
+              {localDirty && (
+                <span className="text-[10px] font-medium text-amber-600">Unsaved changes</span>
+              )}
+              <BodyViewModeToggle value={bodyViewMode} onChange={handleBodyViewModeChange} />
+            </div>
           </div>
-          <Textarea
-            value={editorValue}
-            onChange={(event) => {
-              setEditorValue(event.target.value);
-              setLocalDirty(event.target.value !== draft.body);
-            }}
-            className="min-h-[200px] flex-1 resize-none font-mono text-[13px] leading-6"
-            placeholder="The AI draft will stream in here. You can edit freely — manual edits stop the AI from overwriting this copy."
-          />
+          {bodyViewMode === "edit" && (
+            <Textarea
+              value={editorValue}
+              onChange={(event) => {
+                setEditorValue(event.target.value);
+                setLocalDirty(event.target.value !== draft.body);
+              }}
+              className="min-h-[200px] flex-1 resize-none font-mono text-[13px] leading-6"
+              placeholder="The AI draft will stream in here. You can edit freely — manual edits stop the AI from overwriting this copy."
+            />
+          )}
+          {bodyViewMode === "preview" && (
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-md border border-border/70 bg-card/40 p-4">
+              <DraftBodyPreview body={editorValue} cwd={campaign.projectCwd} />
+            </div>
+          )}
+          {bodyViewMode === "split" && (
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-2 md:grid-cols-2">
+              <Textarea
+                value={editorValue}
+                onChange={(event) => {
+                  setEditorValue(event.target.value);
+                  setLocalDirty(event.target.value !== draft.body);
+                }}
+                className="min-h-0 resize-none font-mono text-[13px] leading-6"
+                placeholder="The AI draft will stream in here."
+              />
+              <div className="min-h-0 overflow-y-auto overscroll-contain rounded-md border border-border/70 bg-card/40 p-4">
+                <DraftBodyPreview body={editorValue} cwd={campaign.projectCwd} />
+              </div>
+            </div>
+          )}
 
           <div className="mt-3 flex shrink-0 flex-wrap items-center gap-1.5">
             <Button size="sm" variant="default" onClick={handleSaveBody} disabled={!localDirty}>
@@ -456,13 +557,13 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
             )}
           </div>
 
-          <div className="min-h-[200px] min-w-0 flex-1 overflow-y-auto overscroll-contain whitespace-pre-wrap rounded-xl border border-border/70 bg-card/60 p-4 text-[13px] leading-6 text-foreground/90">
+          <div className="min-h-[200px] min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-xl border border-border/70 bg-card/60 p-4">
             {latestAssistantText.trim().length === 0 ? (
-              <p className="italic text-muted-foreground">
+              <p className="text-[13px] italic leading-6 text-muted-foreground">
                 The provider hasn't responded yet. Regenerate below or add feedback to nudge it.
               </p>
             ) : (
-              latestAssistantText
+              <DraftBodyPreview body={latestAssistantText} cwd={campaign.projectCwd} />
             )}
           </div>
 
