@@ -46,8 +46,7 @@ export const CampaignModelPicker = memo(function CampaignModelPicker(props: {
   >(
     () => ({
       codex: providers.find((provider) => provider.provider === "codex")?.models ?? [],
-      claudeAgent:
-        providers.find((provider) => provider.provider === "claudeAgent")?.models ?? [],
+      claudeAgent: providers.find((provider) => provider.provider === "claudeAgent")?.models ?? [],
       opencode: providers.find((provider) => provider.provider === "opencode")?.models ?? [],
       cursor: providers.find((provider) => provider.provider === "cursor")?.models ?? [],
     }),

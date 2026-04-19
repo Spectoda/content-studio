@@ -22,10 +22,7 @@ export function useDraftBodySync(threadRef: ScopedThreadRef | null | undefined):
   const environmentId = threadRef?.environmentId ?? null;
   const threadId = threadRef?.threadId ?? null;
   const selector = useMemo(
-    () =>
-      createThreadSelectorByRef(
-        environmentId && threadId ? { environmentId, threadId } : null,
-      ),
+    () => createThreadSelectorByRef(environmentId && threadId ? { environmentId, threadId } : null),
     [environmentId, threadId],
   );
   const thread = useStore(selector);

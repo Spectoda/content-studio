@@ -46,34 +46,32 @@ import {
 // --- Prompt builders ------------------------------------------------------
 
 function buildBriefPreamble(campaign: Pick<Campaign, "name" | "brief" | "workingPrompt">): string {
-  const lines: string[] = [`# Campaign brief`, ``, `**Campaign:** ${campaign.name}`];
+  const lines: string[] = [`# Brief kampaně`, ``, `**Kampaň:** ${campaign.name}`];
   if (campaign.brief.trim().length > 0) {
     lines.push(``, `**Brief:**`, campaign.brief.trim());
   }
   if (campaign.workingPrompt.trim().length > 0) {
-    lines.push(
-      ``,
-      `**Working prompt (how the output should feel):**`,
-      campaign.workingPrompt.trim(),
-    );
+    lines.push(``, `**Pracovní prompt (jak má výstup působit):**`, campaign.workingPrompt.trim());
   }
   return lines.join("\n");
 }
 
 function buildChannelInstruction(channel: ChannelConfig): string {
   return [
-    `# Your task`,
+    `# Tvůj úkol`,
     ``,
-    `Write a single ${channel.label} output following this brief.`,
+    `Napiš jeden výstup pro kanál ${channel.label} podle tohoto briefu.`,
     ``,
-    `- Format: ${channel.format}`,
-    `- Target length: ${channel.targetLength}`,
-    `- Tone: ${channel.tone}`,
+    `- Formát: ${channel.format}`,
+    `- Cílová délka: ${channel.targetLength}`,
+    `- Tón: ${channel.tone}`,
     `- Tip: ${channel.tip}`,
     ``,
-    `Respond with the final draft only. Do not include meta commentary, options, or`,
-    `alternatives — produce one clean version that a content manager can copy into`,
-    `the channel as-is. Use markdown for structure when it helps readability.`,
+    `Odpověz pouze finálním draftem. Nepřidávej meta komentáře, varianty ani`,
+    `alternativy — vytvoř jednu čistou verzi, kterou content manager vloží do kanálu`,
+    `tak, jak je. Pokud to pomáhá čitelnosti, použij markdown.`,
+    ``,
+    `Piš česky, pokud v briefu není explicitně požadován jiný jazyk.`,
   ].join("\n");
 }
 
@@ -91,13 +89,13 @@ export function buildRegenerationPrompt(options: {
 }): string {
   const feedback = options.feedback?.trim() ?? "";
   const feedbackSection = feedback
-    ? `\n\n## Feedback to apply\n${feedback}`
-    : "\n\nRewrite the draft from scratch with a different angle while keeping the brief intact.";
+    ? `\n\n## Feedback k zapracování\n${feedback}`
+    : "\n\nPřepiš draft od začátku s jiným úhlem pohledu, ale drž se briefu.";
   return [
     `${buildChannelInstruction(options.channel)}`,
-    `# Revision request`,
+    `# Požadavek na revizi`,
     ``,
-    `The previous draft was not the right fit. Produce a new ${options.channel.label} draft.`,
+    `Předchozí draft nesedl. Vytvoř nový draft pro ${options.channel.label}.`,
     feedbackSection,
   ].join("\n");
 }
@@ -106,7 +104,7 @@ function requireEnvironmentApi(environmentId: EnvironmentId) {
   const api = readEnvironmentApi(environmentId);
   if (!api) {
     throw new Error(
-      `Environment ${environmentId} is not available. Campaign actions require a connected environment.`,
+      `Prostředí ${environmentId} není dostupné. Akce kampaně vyžadují připojené prostředí.`,
     );
   }
   return api;
@@ -279,7 +277,7 @@ function resolveDraftModelSelection(
   const resolved = explicit ?? draft.modelOverride ?? campaign.modelSelection;
   if (!resolved) {
     throw new Error(
-      "No model available for this draft. Pick a model in the draft editor or set a campaign default.",
+      "Pro tento draft není dostupný žádný model. Vyberte model v editoru draftu nebo nastavte výchozí model kampaně.",
     );
   }
   return resolved;
@@ -325,16 +323,16 @@ export async function regenerateDraft(input: RegenerateDraftInput): Promise<void
   const store = useCampaignStore.getState();
   const campaign = store.getCampaignById(input.campaignId);
   if (!campaign) {
-    throw new Error(`Unknown campaign: ${input.campaignId}`);
+    throw new Error(`Neznámá kampaň: ${input.campaignId}`);
   }
   const draft = campaign.drafts.find((entry) => entry.id === input.draftId);
   if (!draft) {
-    throw new Error(`Unknown draft: ${input.draftId}`);
+    throw new Error(`Neznámý draft: ${input.draftId}`);
   }
 
   const channel = getChannelConfig(draft.channel);
   if (!channel) {
-    throw new Error(`Unknown channel: ${draft.channel}`);
+    throw new Error(`Neznámý kanál: ${draft.channel}`);
   }
 
   const api = requireEnvironmentApi(campaign.environmentId);
@@ -372,7 +370,7 @@ export async function regenerateDraft(input: RegenerateDraftInput): Promise<void
 
   const needsBootstrap = !existingThreadId;
   if (needsBootstrap && !input.projectId) {
-    throw new Error("Cannot regenerate: draft has no thread and no projectId was provided.");
+    throw new Error("Regenerace selhala: draft nemá konverzaci a nebylo předáno projectId.");
   }
 
   store.updateDraft(input.campaignId, input.draftId, {
@@ -433,10 +431,10 @@ export async function sendFollowUpToDraftThread(input: {
 }): Promise<void> {
   const store = useCampaignStore.getState();
   const campaign = store.getCampaignById(input.campaignId);
-  if (!campaign) throw new Error(`Unknown campaign: ${input.campaignId}`);
+  if (!campaign) throw new Error(`Neznámá kampaň: ${input.campaignId}`);
   const draft = campaign.drafts.find((entry) => entry.id === input.draftId);
   if (!draft || !draft.threadRef) {
-    throw new Error("Draft has no underlying thread yet. Regenerate first.");
+    throw new Error("Draft zatím nemá konverzaci. Nejdřív spusťte regeneraci.");
   }
 
   const api = requireEnvironmentApi(campaign.environmentId);

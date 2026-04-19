@@ -67,7 +67,7 @@ function DraftPreview({ body }: { body: string }) {
   if (trimmed.length === 0) {
     return (
       <p className="text-[12px] italic text-muted-foreground">
-        Waiting for the first AI response — the draft will stream in here.
+        Čekám na první odpověď AI — draft se sem bude streamovat.
       </p>
     );
   }
@@ -106,7 +106,7 @@ function DraftCard({
             {channelConfig?.label ?? draft.channel}
           </p>
           <p className="truncate text-[11px] text-muted-foreground">
-            {channelConfig?.format ?? "Channel draft"} · {channelConfig?.targetLength ?? ""}
+            {channelConfig?.format ?? "Draft kanálu"} · {channelConfig?.targetLength ?? ""}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -119,14 +119,14 @@ function DraftCard({
         <DraftPreview body={draft.body} />
         {draft.bodyIsManuallyEdited && (
           <p className="mt-2 text-[10px] font-medium uppercase tracking-wider text-amber-600">
-            Manually edited
+            Ručně upraveno
           </p>
         )}
       </div>
 
       <footer className="flex flex-wrap items-center gap-1.5 border-t border-border/70 bg-background/40 px-3 py-2">
         <Button size="sm" variant="default" className="gap-1" onClick={onOpen}>
-          Open
+          Otevřít
           <ArrowUpRightIcon className="size-3" />
         </Button>
         <Button
@@ -137,8 +137,8 @@ function DraftCard({
           disabled={isGenerating}
           title={
             isGenerating
-              ? "AI is generating a fresh draft — this usually finishes within 20–60 seconds."
-              : "Ask the AI for a new version of this draft. Previous text is replaced."
+              ? "AI generuje nový draft — obvykle trvá 20–60 sekund."
+              : "Požádat AI o novou verzi tohoto draftu. Předchozí text se nahradí."
           }
         >
           {isGenerating ? (
@@ -146,20 +146,16 @@ function DraftCard({
           ) : (
             <RefreshCwIcon className="size-3" />
           )}
-          {isGenerating
-            ? "Regenerating…"
-            : draft.threadRef
-              ? "Regenerate"
-              : "Generate"}
+          {isGenerating ? "Regeneruji…" : draft.threadRef ? "Regenerovat" : "Vygenerovat"}
         </Button>
         {draft.status !== "approved" ? (
           <Button size="sm" variant="ghost" className="gap-1" onClick={onApprove}>
             <CheckCircle2Icon className="size-3 text-emerald-500" />
-            Approve
+            Schválit
           </Button>
         ) : (
           <Button size="sm" variant="ghost" className="gap-1" onClick={onMarkReview}>
-            Reopen
+            Znovu otevřít
           </Button>
         )}
         {draft.modelOverride ? (
@@ -181,9 +177,9 @@ function DraftCard({
             variant="ghost"
             className="ms-auto text-[10px] text-muted-foreground"
             onClick={onOpen}
-            title="Using the campaign default. Open the draft editor to pick a different model."
+            title="Používá se výchozí model kampaně. Otevřete editor draftu a vyberte jiný."
           >
-            Model: default
+            Model: výchozí
           </Button>
         )}
       </footer>
@@ -222,15 +218,15 @@ function CampaignTechnicalInfo({ campaign }: { campaign: Campaign }) {
     const drafts = campaign.drafts;
     const threadsWithRef = drafts.filter((d) => d.threadRef);
     return [
-      ["Campaign ID", campaign.id],
+      ["ID kampaně", campaign.id],
       ["Status", campaign.status],
-      ["Created", formatTimestamp(campaign.createdAt)],
-      ["Last updated", formatTimestamp(campaign.updatedAt)],
-      ["Environment", campaign.environmentId ?? "—"],
-      ["Project", campaign.projectName ?? campaign.projectId ?? "—"],
-      ["Project cwd", campaign.projectCwd ?? "—"],
-      ["Default model", formatModelSelection(campaign.modelSelection)],
-      ["Drafts", `${drafts.length} (${threadsWithRef.length} with threads)`],
+      ["Vytvořeno", formatTimestamp(campaign.createdAt)],
+      ["Poslední změna", formatTimestamp(campaign.updatedAt)],
+      ["Prostředí", campaign.environmentId ?? "—"],
+      ["Projekt", campaign.projectName ?? campaign.projectId ?? "—"],
+      ["Cesta projektu", campaign.projectCwd ?? "—"],
+      ["Výchozí model", formatModelSelection(campaign.modelSelection)],
+      ["Drafty", `${drafts.length} (${threadsWithRef.length} s konverzací)`],
     ];
   }, [campaign]);
 
@@ -239,7 +235,7 @@ function CampaignTechnicalInfo({ campaign }: { campaign: Campaign }) {
       channel: draft.channel,
       label: draft.modelOverride
         ? `${formatModelSelection(draft.modelOverride)} (override)`
-        : `${formatModelSelection(campaign.modelSelection)} (default)`,
+        : `${formatModelSelection(campaign.modelSelection)} (výchozí)`,
     }));
   }, [campaign]);
 
@@ -247,13 +243,11 @@ function CampaignTechnicalInfo({ campaign }: { campaign: Campaign }) {
     const draftLines = draftModelRows.map(
       (entry) => `  ${entry.channel.padEnd(14)} ${entry.label}`,
     );
-    const text = [
-      ...rows.map(([k, v]) => `${k}: ${v}`),
-      "Draft models:",
-      ...draftLines,
-    ].join("\n");
+    const text = [...rows.map(([k, v]) => `${k}: ${v}`), "Modely draftů:", ...draftLines].join(
+      "\n",
+    );
     void navigator.clipboard.writeText(text).then(() => {
-      toastManager.add({ type: "success", title: "Technical info copied to clipboard" });
+      toastManager.add({ type: "success", title: "Technické info zkopírováno do schránky" });
     });
   }, [rows, draftModelRows]);
 
@@ -261,9 +255,9 @@ function CampaignTechnicalInfo({ campaign }: { campaign: Campaign }) {
     <details className="group rounded-xl border border-border/70 bg-background/40 text-[12px]">
       <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-muted-foreground transition-colors hover:text-foreground">
         <InfoIcon className="size-3.5" />
-        <span className="font-medium">Technical info</span>
+        <span className="font-medium">Technické info</span>
         <span className="text-[10px] font-normal opacity-70">
-          (useful when troubleshooting with engineering)
+          (užitečné při řešení problémů s vývojáři)
         </span>
       </summary>
       <div className="border-t border-border/70 px-3 pb-3 pt-2">
@@ -285,14 +279,12 @@ function CampaignTechnicalInfo({ campaign }: { campaign: Campaign }) {
             {campaign.drafts.map((draft) => (
               <div key={draft.id} className="truncate">
                 <span className="inline-block w-20 opacity-70">{draft.channel}</span>
-                <span className="select-text break-all">
-                  {draft.threadRef?.threadId ?? "—"}
-                </span>
+                <span className="select-text break-all">{draft.threadRef?.threadId ?? "—"}</span>
               </div>
             ))}
           </dd>
           <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Draft models
+            Modely draftů
           </dt>
           <dd className="space-y-0.5 font-mono text-[11px] text-foreground/80">
             {draftModelRows.map((entry) => (
@@ -303,14 +295,9 @@ function CampaignTechnicalInfo({ campaign }: { campaign: Campaign }) {
             ))}
           </dd>
         </dl>
-        <Button
-          size="sm"
-          variant="outline"
-          className="mt-3 gap-1"
-          onClick={copyToClipboard}
-        >
+        <Button size="sm" variant="outline" className="mt-3 gap-1" onClick={copyToClipboard}>
           <ClipboardCopyIcon className="size-3" />
-          Copy info
+          Zkopírovat info
         </Button>
       </div>
     </details>
@@ -332,7 +319,9 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
   const orderedProjectIds = useMemo<ProjectId[]>(() => {
     if (projectOrder.length === 0) return projectIds;
     const projectIdSet = new Set<string>(projectIds);
-    const ordered = projectOrder.filter((id): id is ProjectId => projectIdSet.has(id)) as ProjectId[];
+    const ordered = projectOrder.filter((id): id is ProjectId =>
+      projectIdSet.has(id),
+    ) as ProjectId[];
     const remaining = projectIds.filter((id) => !projectOrder.includes(id));
     return [...ordered, ...remaining];
   }, [projectIds, projectOrder]);
@@ -381,8 +370,8 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
       } catch (err) {
         toastManager.add({
           type: "error",
-          title: "Could not regenerate draft",
-          description: err instanceof Error ? err.message : "Unknown error.",
+          title: "Draft se nepodařilo regenerovat",
+          description: err instanceof Error ? err.message : "Neznámá chyba.",
         });
       } finally {
         setRegeneratingDraftId((current) => (current === draft.id ? null : current));
@@ -408,9 +397,9 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
   if (!campaign) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-background text-muted-foreground">
-        <p className="text-sm">Campaign not found.</p>
+        <p className="text-sm">Kampaň nenalezena.</p>
         <Link to="/" className="mt-2 text-xs text-sky-500 hover:underline">
-          Back to Content Studio
+          Zpět do Content Studia
         </Link>
       </div>
     );
@@ -425,7 +414,7 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
       {!isElectron && (
         <header className="flex items-center gap-2 border-b border-border/70 px-4 py-2 md:hidden">
           <SidebarTrigger className="size-7 shrink-0" />
-          <span className="truncate text-sm font-medium">{campaign.name || "Campaign"}</span>
+          <span className="truncate text-sm font-medium">{campaign.name || "Kampaň"}</span>
         </header>
       )}
 
@@ -436,12 +425,12 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-600">
-                Campaign
+                Kampaň
               </p>
               <h1 className="mt-1 text-2xl font-semibold tracking-tight">{campaign.name}</h1>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                {approvedCount}/{campaign.drafts.length} approved ·{" "}
-                {generatingCount > 0 ? `${generatingCount} generating` : "idle"}
+                {approvedCount}/{campaign.drafts.length} schváleno ·{" "}
+                {generatingCount > 0 ? `${generatingCount} se generuje` : "nečinné"}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -458,7 +447,7 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
                   onClick={() => setCampaignStatus(campaign.id, "ready")}
                 >
                   <SparklesIcon className="size-3" />
-                  Mark campaign ready
+                  Označit kampaň jako hotovou
                 </Button>
               )}
             </div>
@@ -475,7 +464,7 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
           {campaign.workingPrompt.trim().length > 0 && (
             <div className="rounded-xl border border-border/70 bg-background/50 p-3 text-[12.5px] leading-5 text-foreground/90">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Working prompt
+                Pracovní prompt
               </p>
               <p className="mt-1 whitespace-pre-wrap">{campaign.workingPrompt}</p>
             </div>
@@ -486,15 +475,15 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
 
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Drafts by channel</h2>
+            <h2 className="text-sm font-semibold">Drafty podle kanálu</h2>
             <p className="text-[11px] text-muted-foreground">
-              Click a draft to open the editor. Regenerating affects only that channel.
+              Kliknutím na draft otevřete editor. Regenerace ovlivní jen tento kanál.
             </p>
           </div>
 
           {campaign.drafts.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border/80 bg-card/50 p-8 text-center text-sm text-muted-foreground">
-              No drafts yet — pick channels when creating the campaign to populate this view.
+              Zatím žádné drafty — při zakládání kampaně vyberte kanály, aby se zde objevily.
             </div>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -512,7 +501,7 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
             </div>
           )}
           {regeneratingDraftId !== null && (
-            <p className="mt-2 text-[11px] text-muted-foreground">Requesting new draft…</p>
+            <p className="mt-2 text-[11px] text-muted-foreground">Žádám o nový draft…</p>
           )}
         </section>
       </div>

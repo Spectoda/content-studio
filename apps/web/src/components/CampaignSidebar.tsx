@@ -139,7 +139,7 @@ function CampaignRow({
                 onToggle();
               }}
               className="flex size-4 items-center justify-center rounded hover:bg-accent/60"
-              aria-label={expanded ? "Collapse campaign" : "Expand campaign"}
+              aria-label={expanded ? "Sbalit kampaň" : "Rozbalit kampaň"}
             >
               <ChevronRightIcon
                 className={`size-3 text-muted-foreground transition-transform ${
@@ -149,7 +149,7 @@ function CampaignRow({
             </button>
             <StatusDot status={campaign.status} />
             <span className="min-w-0 flex-1 truncate text-sm font-medium">
-              {campaign.name || "Untitled campaign"}
+              {campaign.name || "Kampaň bez názvu"}
             </span>
             {generatingCount > 0 ? (
               <Loader2Icon className="size-3 animate-spin text-sky-500" />
@@ -159,7 +159,9 @@ function CampaignRow({
           </div>
           <div className="flex w-full items-center justify-between pl-[22px] text-[10px] text-muted-foreground">
             <span className="truncate">
-              {totalDrafts === 0 ? "No drafts yet" : `${approvedCount}/${totalDrafts} approved`}
+              {totalDrafts === 0
+                ? "Zatím žádné drafty"
+                : `${approvedCount}/${totalDrafts} schváleno`}
             </span>
             <span className="shrink-0">{formatRelativeTimeLabel(campaign.updatedAt)}</span>
           </div>
@@ -268,16 +270,15 @@ export function CampaignSidebar() {
               </Button>
             }
           />
-          <TooltipPopup side="right">New campaign</TooltipPopup>
+          <TooltipPopup side="right">Nová kampaň</TooltipPopup>
         </Tooltip>
       </SidebarHeader>
 
       <SidebarContent className="overflow-y-auto">
         {campaigns.length === 0 ? (
           <div className="px-3 pt-2 text-[11px] leading-5 text-muted-foreground">
-            No campaigns yet. Use the{" "}
-            <span className="font-medium text-foreground">New campaign</span> button to start your
-            first one.
+            Zatím žádné kampaně. Použijte tlačítko{" "}
+            <span className="font-medium text-foreground">Nová kampaň</span> a založte svou první.
           </div>
         ) : null}
 
@@ -320,7 +321,7 @@ export function CampaignSidebar() {
             className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
           >
             <SettingsIcon className="size-3" />
-            Settings
+            Nastavení
           </Link>
           <span className="text-[10px] text-muted-foreground">
             {APP_STAGE_LABEL} {APP_VERSION}

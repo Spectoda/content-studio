@@ -72,10 +72,10 @@ export interface Campaign {
 }
 
 export const CAMPAIGN_STATUS_LABEL: Record<CampaignStatus, string> = {
-  draft: "Draft",
-  in_progress: "In progress",
-  ready: "Ready",
-  archived: "Archived",
+  draft: "Rozepsané",
+  in_progress: "Probíhá",
+  ready: "Hotové",
+  archived: "Archivováno",
 };
 
 export const CAMPAIGN_STATUS_ORDER: CampaignStatus[] = [
@@ -86,11 +86,11 @@ export const CAMPAIGN_STATUS_ORDER: CampaignStatus[] = [
 ];
 
 export const DRAFT_STATUS_LABEL: Record<DraftOutputStatus, string> = {
-  empty: "Empty",
-  generating: "Generating",
+  empty: "Prázdné",
+  generating: "Generuji",
   draft: "Draft",
-  review: "Review",
-  approved: "Approved",
+  review: "Ke kontrole",
+  approved: "Schváleno",
 };
 
 // --- Persistence ----------------------------------------------------------

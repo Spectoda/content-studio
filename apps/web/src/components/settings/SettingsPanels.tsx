@@ -23,7 +23,8 @@ import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
 import { normalizeModelSlug } from "@t3tools/shared/model";
 import { createModelSelection } from "@t3tools/shared/model";
 import { Equal } from "effect";
-import { APP_BASE_NAME, APP_VERSION } from "../../branding";
+import { APP_BASE_NAME, APP_VERSION, IS_CONTENT_STUDIO } from "../../branding";
+import { useCommandPaletteStore } from "../../commandPaletteStore";
 import {
   canCheckForUpdate,
   getDesktopUpdateButtonTooltip,
@@ -588,6 +589,7 @@ export function GeneralSettingsPanel() {
   const availableEditors = useServerAvailableEditors();
   const observability = useServerObservability();
   const serverProviders = useServerProviders();
+  const configuredProjects = useStore(useShallow(selectProjectsAcrossEnvironments));
   const visibleProviderSettings = PROVIDER_SETTINGS.filter(
     (providerSettings) =>
       providerSettings.provider !== "cursor" ||
@@ -1129,6 +1131,43 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
+
+      {IS_CONTENT_STUDIO ? (
+        <SettingsSection title="Pracovní prostor">
+          <SettingsRow
+            title="Kořenová složka agenta"
+            description="Složka, ve které agent pracuje a ze které čte vaše podklady (firemní znalosti, dokumentaci, obsah). Výběr otevře systémový Finder přes příkazovou paletu. Pokud vyberete složku, která ještě není nakonfigurovaná, vytvoří se nový pracovní prostor; pokud už existuje, agent na něj přepne."
+            control={
+              <Button
+                size="xs"
+                variant="default"
+                onClick={() => useCommandPaletteStore.getState().openAddProject()}
+              >
+                Vybrat složku…
+              </Button>
+            }
+          />
+
+          {configuredProjects.length > 0 ? (
+            <SettingsRow
+              title="Nakonfigurované pracovní prostory"
+              description="Mezi prostory můžete přepínat v bočním panelu nebo v příkazové paletě (Cmd/Ctrl + K)."
+              status={
+                <div className="flex flex-col gap-1">
+                  {configuredProjects.map((project) => (
+                    <span
+                      key={`${project.environmentId}:${project.id}`}
+                      className="block break-all font-mono text-[11px] text-foreground"
+                    >
+                      {project.cwd}
+                    </span>
+                  ))}
+                </div>
+              }
+            />
+          ) : null}
+        </SettingsSection>
+      ) : null}
 
       <SettingsSection
         title="Providers"
