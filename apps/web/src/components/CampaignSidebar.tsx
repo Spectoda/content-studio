@@ -23,8 +23,10 @@ import {
   type Campaign,
   CAMPAIGN_STATUS_LABEL,
   CAMPAIGN_STATUS_ORDER,
+  deriveDraftStatus,
   DRAFT_STATUS_LABEL,
   type DraftOutput,
+  type DraftOutputStatus,
   useCampaignStore,
 } from "../campaignStore";
 import { getChannelLabel } from "../campaignChannels";
@@ -55,7 +57,7 @@ function StatusDot({ status }: { status: Campaign["status"] }) {
   return <span className={`inline-block size-1.5 rounded-full ${color}`} />;
 }
 
-function DraftStatusChip({ status }: { status: DraftOutput["status"] }) {
+function DraftStatusChip({ status }: { status: DraftOutputStatus }) {
   const style =
     status === "approved"
       ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
@@ -96,7 +98,7 @@ function DraftChildRow({
         <span className="min-w-0 flex-1 truncate text-[12px]">
           {getChannelLabel(draft.channel)}
         </span>
-        <DraftStatusChip status={draft.status} />
+        <DraftStatusChip status={deriveDraftStatus(draft)} />
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
@@ -119,8 +121,8 @@ function CampaignRow({
   onNavigate: () => void;
   onNavigateDraft: (draft: DraftOutput) => void;
 }) {
-  const approvedCount = campaign.drafts.filter((draft) => draft.status === "approved").length;
-  const generatingCount = campaign.drafts.filter((draft) => draft.status === "generating").length;
+  const approvedCount = campaign.drafts.filter((draft) => draft.review === "approved").length;
+  const generatingCount = campaign.drafts.filter((draft) => draft.progress === "generating").length;
   const totalDrafts = campaign.drafts.length;
 
   return (

@@ -277,9 +277,7 @@ export function CampaignCreateForm({ variant = "hero", onCreated }: CampaignCrea
                   disabled={submitting}
                 />
               ) : (
-                <span className="text-[11px] italic text-muted-foreground">
-                  Načítám providery…
-                </span>
+                <span className="text-[11px] italic text-muted-foreground">Načítám providery…</span>
               )}
             </div>
           </div>

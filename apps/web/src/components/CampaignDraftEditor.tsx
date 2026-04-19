@@ -34,12 +34,19 @@ import type { ModelSelection, ProjectId } from "@t3tools/contracts";
 
 import { getChannelConfig } from "../campaignChannels";
 import {
+  acceptAiAuthoredBody,
   regenerateDraft,
   saveDraftBody,
   sendFollowUpToDraftThread,
-  setDraftStatus,
+  setDraftReview,
 } from "../campaignCommands";
-import { type DraftOutput, DRAFT_STATUS_LABEL, useCampaignStore } from "../campaignStore";
+import {
+  deriveDraftStatus,
+  type DraftOutput,
+  type DraftOutputStatus,
+  DRAFT_STATUS_LABEL,
+  useCampaignStore,
+} from "../campaignStore";
 import { useDraftBodySync } from "../hooks/useDraftBodySync";
 import { useSettings } from "../hooks/useSettings";
 import { isElectron } from "../env";
@@ -116,7 +123,7 @@ function BodyViewModeToggle({
   );
 }
 
-function DraftStatusBadge({ status }: { status: DraftOutput["status"] }) {
+function DraftStatusBadge({ status }: { status: DraftOutputStatus }) {
   const className =
     status === "approved"
       ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
@@ -169,7 +176,8 @@ function DraftTechnicalInfo({
     () => [
       ["ID draftu", draft.id],
       ["Kanál", draft.channel],
-      ["Status", draft.status],
+      ["Progres", draft.progress],
+      ["Review", draft.review],
       ["Poslední změna", formatTimestamp(draft.updatedAt)],
       ["Thread ID", draft.threadRef?.threadId ?? "(nespuštěno)"],
       ["Prostředí", draft.threadRef?.environmentId ?? campaign.environmentId ?? "—"],
@@ -336,7 +344,10 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
 
   const handleSaveBody = useCallback(() => {
     if (!campaign || !draft) return;
-    saveDraftBody(campaign.id, draft.id, editorValue, { status: "draft" });
+    // Saving a manual edit clears any pending "review" / "approved" marker —
+    // the user has touched the body, so we want a clean "draft" state to
+    // review from. `none` is the canonical default for "no decision yet".
+    saveDraftBody(campaign.id, draft.id, editorValue, { review: "none" });
     setLocalDirty(false);
     toastManager.add({
       type: "success",
@@ -347,7 +358,7 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
 
   const handleRevertToAi = useCallback(() => {
     if (!campaign || !draft) return;
-    saveDraftBody(campaign.id, draft.id, latestAssistantText, { status: "draft" });
+    acceptAiAuthoredBody(campaign.id, draft.id, latestAssistantText);
     setLocalDirty(false);
     setEditorValue(latestAssistantText);
   }, [campaign, draft, latestAssistantText]);
@@ -355,16 +366,16 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
   const handleApprove = useCallback(() => {
     if (!campaign || !draft) return;
     if (localDirty) {
-      saveDraftBody(campaign.id, draft.id, editorValue, { status: "approved" });
+      saveDraftBody(campaign.id, draft.id, editorValue, { review: "approved" });
       setLocalDirty(false);
     } else {
-      setDraftStatus(campaign.id, draft.id, "approved");
+      setDraftReview(campaign.id, draft.id, "approved");
     }
   }, [campaign, draft, editorValue, localDirty]);
 
   const handleRequestChanges = useCallback(() => {
     if (!campaign || !draft) return;
-    setDraftStatus(campaign.id, draft.id, "review");
+    setDraftReview(campaign.id, draft.id, "pending_changes");
   }, [campaign, draft]);
 
   const handleRegenerate = useCallback(async () => {
@@ -396,6 +407,22 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
     if (!campaign || !draft) return;
     const trimmed = feedback.trim();
     if (trimmed.length === 0) return;
+
+    // When the user has hand-edited the body, the incoming AI reply *will*
+    // replace whatever was in the textarea (because we drop
+    // `bodyIsManuallyEdited` for the duration of the new turn so the sync
+    // hook is allowed to stream the fresh output back in). Getting surprised
+    // by that after carefully editing by hand is the worst UX; gate it
+    // behind an explicit opt-in.
+    if (draft.bodyIsManuallyEdited) {
+      const confirmed = window.confirm(
+        "Draft má ruční úpravy. Follow-up od AI je přepíše novou verzí. Pokračovat?",
+      );
+      if (!confirmed) return;
+      // Handing authorship back to the AI is a precondition for the sync
+      // hook to adopt the incoming stream.
+      acceptAiAuthoredBody(campaign.id, draft.id);
+    }
 
     try {
       const modelSelection =
@@ -442,7 +469,8 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
     );
   }
 
-  const isGenerating = draft.status === "generating";
+  const draftStatus = deriveDraftStatus(draft);
+  const isGenerating = draftStatus === "generating";
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
@@ -477,7 +505,7 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <DraftStatusBadge status={draft.status} />
+          <DraftStatusBadge status={draftStatus} />
           {isGenerating && (
             <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] text-sky-600">
               <Loader2Icon className="size-3 animate-spin" />
@@ -494,7 +522,7 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
             <ClipboardCopyIcon className="size-3" />
             Kopírovat
           </Button>
-          {draft.status !== "approved" ? (
+          {draft.review !== "approved" ? (
             <Button size="sm" variant="default" className="gap-1" onClick={handleApprove}>
               <CheckCircle2Icon className="size-3" />
               Označit jako schválený

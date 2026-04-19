@@ -8,8 +8,22 @@
  *
  * Campaigns and drafts are persisted to localStorage so the UI can boot
  * offline. AI generation lives on provider threads referenced by each draft
- * via `threadId`; the store keeps the channel-scoped state that wraps those
+ * via `threadRef`; the store keeps the channel-scoped state that wraps those
  * threads.
+ *
+ * ## Two-axis draft state
+ *
+ * Draft state is deliberately split along two independent axes to avoid the
+ * race conditions a single `status` field used to cause (see the regression
+ * test in `useDraftBodySync.test.ts` for the motivating bug):
+ *
+ *  - `review`   — user intent ("none" / "pending_changes" / "approved"),
+ *                 written only by UI handlers.
+ *  - `progress` — orchestration progress ("empty" / "generating" / "draft"),
+ *                 written only by `campaignCommands` and the sync hook.
+ *
+ * The flat `DraftOutputStatus` used by badges and chips is derived from
+ * both axes via `deriveDraftStatus` and must never be stored.
  */
 
 import { create } from "zustand";
@@ -25,7 +39,29 @@ import { type ChannelId } from "./campaignChannels";
 
 export type CampaignStatus = "draft" | "in_progress" | "ready" | "archived";
 
-export type DraftOutputStatus = "empty" | "generating" | "draft" | "review" | "approved";
+/**
+ * The user-owned review state of a draft. Independent of whether the AI is
+ * currently producing output. "none" is the default (no explicit user
+ * decision yet); "pending_changes" is the legacy "review" status (user asked
+ * for changes); "approved" marks the draft as ready to ship.
+ */
+export type DraftReview = "none" | "pending_changes" | "approved";
+
+/**
+ * The orchestration-owned progress state of a draft. Describes only whether
+ * the backing thread has produced any output and whether a turn is currently
+ * running. Writes to this field belong exclusively to `campaignCommands` and
+ * `useDraftBodySync` — never to UI handlers.
+ */
+export type DraftProgress = "empty" | "generating" | "draft";
+
+/**
+ * Legacy flat status used by UI surfaces (badges, chips, sidebar). Derived
+ * on read from (`review`, `progress`) via `deriveDraftStatus`. Keeping this
+ * type exported so existing consumers can keep their current label/colour
+ * maps without immediate changes.
+ */
+export type DraftOutputStatus = DraftProgress | "review" | "approved";
 
 export interface DraftOutput {
   id: string;
@@ -34,7 +70,16 @@ export interface DraftOutput {
   title: string;
   body: string;
   bodyIsManuallyEdited: boolean;
-  status: DraftOutputStatus;
+  /**
+   * User-owned review state. Defaults to "none" for freshly generated drafts.
+   * Only UI handlers (approve / request changes) write to this field.
+   */
+  review: DraftReview;
+  /**
+   * Orchestration-owned progress. Only `campaignCommands` and the sync hook
+   * write to this field — UI handlers must not touch it.
+   */
+  progress: DraftProgress;
   threadRef: ScopedThreadRef | null;
   updatedAt: string;
   /**
@@ -49,6 +94,19 @@ export interface DraftOutput {
    * - `ModelSelection` — the explicit per-draft choice.
    */
   modelOverride?: ModelSelection | null;
+}
+
+/**
+ * Collapse the two-axis (review, progress) model into the flat status used by
+ * badges and chips. Review beats progress: an approved draft stays "approved"
+ * even if a new turn is somehow streaming in the background.
+ */
+export function deriveDraftStatus(
+  draft: Pick<DraftOutput, "review" | "progress">,
+): DraftOutputStatus {
+  if (draft.review === "approved") return "approved";
+  if (draft.review === "pending_changes") return "review";
+  return draft.progress;
 }
 
 export interface Campaign {
@@ -97,6 +155,42 @@ export const DRAFT_STATUS_LABEL: Record<DraftOutputStatus, string> = {
 
 const CAMPAIGNS_STORAGE_KEY = "content-studio:campaigns:v1";
 
+/**
+ * Shape of legacy drafts persisted before `review`/`progress` were split out
+ * of the single `status` field. We still read these so upgrading the app
+ * doesn't wipe saved campaigns.
+ */
+export interface LegacyDraftOutput extends Omit<DraftOutput, "review" | "progress"> {
+  status?: DraftOutputStatus;
+  review?: DraftReview;
+  progress?: DraftProgress;
+}
+
+export function migrateDraft(entry: LegacyDraftOutput): DraftOutput {
+  if (entry.review && entry.progress) {
+    // Already on the new schema.
+    const { status: _legacyStatus, ...rest } = entry;
+    void _legacyStatus;
+    return { ...rest, review: entry.review, progress: entry.progress };
+  }
+  const legacyStatus = entry.status ?? "empty";
+  const review: DraftReview =
+    legacyStatus === "approved"
+      ? "approved"
+      : legacyStatus === "review"
+        ? "pending_changes"
+        : "none";
+  const progress: DraftProgress =
+    legacyStatus === "generating" ? "generating" : legacyStatus === "empty" ? "empty" : "draft";
+  const { status: _legacyStatus, ...rest } = entry;
+  void _legacyStatus;
+  return { ...rest, review, progress };
+}
+
+function migrateCampaign(campaign: Campaign & { drafts: LegacyDraftOutput[] }): Campaign {
+  return { ...campaign, drafts: campaign.drafts.map(migrateDraft) };
+}
+
 function loadCampaigns(): Campaign[] {
   if (typeof localStorage === "undefined") return [];
   try {
@@ -104,7 +198,7 @@ function loadCampaigns(): Campaign[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed as Campaign[];
+    return (parsed as Array<Campaign & { drafts: LegacyDraftOutput[] }>).map(migrateCampaign);
   } catch {
     return [];
   }

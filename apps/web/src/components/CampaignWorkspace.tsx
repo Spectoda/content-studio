@@ -24,12 +24,14 @@ import type { ModelSelection, ProjectId } from "@t3tools/contracts";
 
 import {
   type Campaign,
+  deriveDraftStatus,
   type DraftOutput,
+  type DraftOutputStatus,
   DRAFT_STATUS_LABEL,
   useCampaignStore,
 } from "../campaignStore";
 import { getChannelConfig, getChannelLabel } from "../campaignChannels";
-import { regenerateDraft, setCampaignStatus, setDraftStatus } from "../campaignCommands";
+import { regenerateDraft, setCampaignStatus, setDraftReview } from "../campaignCommands";
 import { resolveAppModelSelectionState } from "../modelSelection";
 import { useServerProviders } from "../rpc/serverState";
 import { useSettings } from "../hooks/useSettings";
@@ -44,7 +46,7 @@ import { SidebarTrigger } from "./ui/sidebar";
 import { isElectron } from "../env";
 import { toastManager } from "./ui/toast";
 
-function DraftStatusBadge({ status }: { status: DraftOutput["status"] }) {
+function DraftStatusBadge({ status }: { status: DraftOutputStatus }) {
   const className =
     status === "approved"
       ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
@@ -96,7 +98,8 @@ function DraftCard({
 }) {
   useDraftBodySync(draft.threadRef);
   const channelConfig = getChannelConfig(draft.channel);
-  const isGenerating = draft.status === "generating";
+  const draftStatus = deriveDraftStatus(draft);
+  const isGenerating = draftStatus === "generating";
 
   return (
     <article className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition hover:border-sky-500/40">
@@ -111,7 +114,7 @@ function DraftCard({
         </div>
         <div className="flex items-center gap-1.5">
           {isGenerating && <Loader2Icon className="size-3.5 animate-spin text-sky-500" />}
-          <DraftStatusBadge status={draft.status} />
+          <DraftStatusBadge status={draftStatus} />
         </div>
       </header>
 
@@ -148,7 +151,7 @@ function DraftCard({
           )}
           {isGenerating ? "Regeneruji…" : draft.threadRef ? "Regenerovat" : "Vygenerovat"}
         </Button>
-        {draft.status !== "approved" ? (
+        {draft.review !== "approved" ? (
           <Button size="sm" variant="ghost" className="gap-1" onClick={onApprove}>
             <CheckCircle2Icon className="size-3 text-emerald-500" />
             Schválit
@@ -382,14 +385,14 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
 
   const handleApprove = useCallback(
     (draft: DraftOutput) => {
-      setDraftStatus(campaignId, draft.id, "approved");
+      setDraftReview(campaignId, draft.id, "approved");
     },
     [campaignId],
   );
 
   const handleReopen = useCallback(
     (draft: DraftOutput) => {
-      setDraftStatus(campaignId, draft.id, "review");
+      setDraftReview(campaignId, draft.id, "pending_changes");
     },
     [campaignId],
   );
@@ -405,8 +408,8 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
     );
   }
 
-  const approvedCount = campaign.drafts.filter((draft) => draft.status === "approved").length;
-  const generatingCount = campaign.drafts.filter((draft) => draft.status === "generating").length;
+  const approvedCount = campaign.drafts.filter((draft) => draft.review === "approved").length;
+  const generatingCount = campaign.drafts.filter((draft) => draft.progress === "generating").length;
   const allApproved = approvedCount > 0 && approvedCount === campaign.drafts.length;
 
   return (

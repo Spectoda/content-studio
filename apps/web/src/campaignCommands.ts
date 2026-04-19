@@ -3,20 +3,25 @@
  *
  * These helpers are the bridge between the Campaign UI (forms, workspace,
  * draft editor) and the orchestration/provider runtime. A campaign owns one
- * provider thread per selected channel, so creation and regeneration map to
- * `thread.turn.start` commands with `bootstrap.createThread` for the first
- * turn and plain `thread.turn.start` for regenerations.
+ * provider thread per selected channel. Every turn — initial generation,
+ * regeneration, follow-up — goes through the single `dispatchDraftTurn`
+ * helper below so the `thread.turn.start` payload is constructed in exactly
+ * one place.
  *
  * Each campaign is bound to a single environment captured at creation. All
  * dispatches go through `readEnvironmentApi(campaign.environmentId)`.
+ *
+ * Draft state has two independent axes — see `campaignStore.ts`:
+ *  - `review`   : user-owned ("none" | "pending_changes" | "approved")
+ *  - `progress` : orchestration-owned ("empty" | "generating" | "draft")
+ * Commands in this file only touch `progress` / `body`; `review` is
+ * written exclusively by UI handlers via `setDraftReview` / `saveDraftBody`.
  */
 
 import {
-  CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
   type EnvironmentId,
-  MessageId,
   type ModelSelection,
   type ProjectId,
   type ProviderInteractionMode,
@@ -40,7 +45,6 @@ import {
   type ChannelConfig,
   type ChannelId,
   getChannelConfig,
-  getChannelLabel,
 } from "./campaignChannels";
 
 // --- Prompt builders ------------------------------------------------------
@@ -110,6 +114,74 @@ function requireEnvironmentApi(environmentId: EnvironmentId) {
   return api;
 }
 
+// --- Dispatch ---------------------------------------------------------------
+
+type EnvironmentApi = ReturnType<typeof requireEnvironmentApi>;
+
+interface DispatchDraftTurnOptions {
+  api: EnvironmentApi;
+  campaignName: string;
+  channelLabel: string;
+  threadId: ThreadId;
+  prompt: string;
+  modelSelection: ModelSelection;
+  runtimeMode: RuntimeMode;
+  interactionMode: ProviderInteractionMode;
+  /**
+   * When the thread doesn't exist yet we include a `bootstrap.createThread`
+   * directive so the provider creates the thread before running the turn.
+   * `null` means the turn runs on an existing thread.
+   */
+  bootstrap: { projectId: ProjectId } | null;
+  createdAt?: string;
+}
+
+/**
+ * Shared implementation for starting a draft turn. `createCampaign`,
+ * `regenerateDraft`, and `sendFollowUpToDraftThread` all dispatch the same
+ * `thread.turn.start` command — they only differ in whether a new thread is
+ * being bootstrapped. Keeping the payload construction in one place is the
+ * whole point of this helper: any new invariant (title format, runtime
+ * defaults, etc.) only needs to be encoded once.
+ */
+async function dispatchDraftTurn(options: DispatchDraftTurnOptions): Promise<void> {
+  const createdAt = options.createdAt ?? new Date().toISOString();
+  const title = truncate(`${options.campaignName} — ${options.channelLabel}`);
+
+  await options.api.orchestration.dispatchCommand({
+    type: "thread.turn.start",
+    commandId: newCommandId(),
+    threadId: options.threadId,
+    message: {
+      messageId: newMessageId(),
+      role: "user",
+      text: options.prompt,
+      attachments: [],
+    },
+    modelSelection: options.modelSelection,
+    titleSeed: title,
+    runtimeMode: options.runtimeMode,
+    interactionMode: options.interactionMode,
+    ...(options.bootstrap
+      ? {
+          bootstrap: {
+            createThread: {
+              projectId: options.bootstrap.projectId,
+              title,
+              modelSelection: options.modelSelection,
+              runtimeMode: options.runtimeMode,
+              interactionMode: options.interactionMode,
+              branch: null,
+              worktreePath: null,
+              createdAt,
+            },
+          },
+        }
+      : {}),
+    createdAt,
+  });
+}
+
 // --- Create campaign ------------------------------------------------------
 
 export interface CreateCampaignInput {
@@ -161,7 +233,8 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Create
     title: `${input.name} — ${channel.label}`,
     body: "",
     bodyIsManuallyEdited: false,
-    status: "generating",
+    review: "none",
+    progress: "generating",
     threadRef: null,
     updatedAt: now,
   }));
@@ -194,41 +267,24 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Create
       const threadId = newThreadId();
       const threadRef: ScopedThreadRef = { environmentId: input.environmentId, threadId };
       const prompt = buildInitialChannelPrompt(campaign, channel);
-      const title = truncate(`${campaign.name} — ${channel.label}`);
 
       try {
-        await api.orchestration.dispatchCommand({
-          type: "thread.turn.start",
-          commandId: newCommandId(),
+        await dispatchDraftTurn({
+          api,
+          campaignName: campaign.name,
+          channelLabel: channel.label,
           threadId,
-          message: {
-            messageId: newMessageId(),
-            role: "user",
-            text: prompt,
-            attachments: [],
-          },
+          prompt,
           modelSelection: input.modelSelection,
-          titleSeed: title,
           runtimeMode,
           interactionMode,
-          bootstrap: {
-            createThread: {
-              projectId: input.projectId,
-              title,
-              modelSelection: input.modelSelection,
-              runtimeMode,
-              interactionMode,
-              branch: null,
-              worktreePath: null,
-              createdAt: now,
-            },
-          },
+          bootstrap: { projectId: input.projectId },
           createdAt: now,
         });
 
         useCampaignStore.getState().updateDraft(campaignId, draft.id, {
           threadRef,
-          status: "generating",
+          progress: "generating",
         });
       } catch (error) {
         dispatchErrors.push({
@@ -236,7 +292,7 @@ export async function createCampaign(input: CreateCampaignInput): Promise<Create
           error: error instanceof Error ? error.message : String(error),
         });
         useCampaignStore.getState().updateDraft(campaignId, draft.id, {
-          status: "empty",
+          progress: "empty",
           threadRef: null,
         });
       }
@@ -363,7 +419,6 @@ export async function regenerateDraft(input: RegenerateDraftInput): Promise<void
     channel,
     feedback: input.feedback ?? null,
   });
-  const title = truncate(`${campaign.name} — ${channel.label}`);
   const existingThreadId: ThreadId | null = draft.threadRef?.threadId ?? null;
   const threadId: ThreadId = existingThreadId ?? newThreadId();
   const threadRef: ScopedThreadRef = { environmentId: campaign.environmentId, threadId };
@@ -374,42 +429,22 @@ export async function regenerateDraft(input: RegenerateDraftInput): Promise<void
   }
 
   store.updateDraft(input.campaignId, input.draftId, {
-    status: "generating",
+    progress: "generating",
     bodyIsManuallyEdited: false,
     body: "",
     threadRef,
   });
 
-  await api.orchestration.dispatchCommand({
-    type: "thread.turn.start",
-    commandId: newCommandId(),
+  await dispatchDraftTurn({
+    api,
+    campaignName: campaign.name,
+    channelLabel: channel.label,
     threadId,
-    message: {
-      messageId: newMessageId(),
-      role: "user",
-      text: prompt,
-      attachments: [],
-    },
+    prompt,
     modelSelection,
-    titleSeed: title,
     runtimeMode,
     interactionMode,
-    ...(needsBootstrap && input.projectId
-      ? {
-          bootstrap: {
-            createThread: {
-              projectId: input.projectId,
-              title,
-              modelSelection,
-              runtimeMode,
-              interactionMode,
-              branch: null,
-              worktreePath: null,
-              createdAt,
-            },
-          },
-        }
-      : {}),
+    bootstrap: needsBootstrap && input.projectId ? { projectId: input.projectId } : null,
     createdAt,
   });
 }
@@ -450,30 +485,31 @@ export async function sendFollowUpToDraftThread(input: {
     });
   }
 
-  store.updateDraft(input.campaignId, input.draftId, { status: "generating" });
+  store.updateDraft(input.campaignId, input.draftId, { progress: "generating" });
 
-  await api.orchestration.dispatchCommand({
-    type: "thread.turn.start",
-    commandId: newCommandId(),
+  const channel = getChannelConfig(draft.channel);
+  await dispatchDraftTurn({
+    api,
+    campaignName: campaign.name,
+    channelLabel: channel?.label ?? draft.channel,
     threadId: draft.threadRef.threadId,
-    message: {
-      messageId: newMessageId(),
-      role: "user",
-      text: input.message,
-      attachments: [],
-    },
+    prompt: input.message,
     modelSelection,
     runtimeMode: input.runtimeMode ?? DEFAULT_RUNTIME_MODE,
     interactionMode: input.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE,
-    createdAt: new Date().toISOString(),
+    bootstrap: null,
   });
 }
 
-// --- Draft body / status helpers -----------------------------------------
+// --- Draft body / progress helpers ---------------------------------------
 
 /**
- * Sync the draft body from its backing thread's latest assistant message,
- * unless the body has been manually edited.
+ * Sync the draft body + progress from its backing thread's current turn.
+ *
+ * Only touches the orchestration-owned axis (`progress`) and the `body`
+ * field. User-owned `review` state is never written here — a draft that was
+ * approved stays approved even if the user re-runs it; flipping it back is
+ * the caller's responsibility.
  */
 export function syncDraftBodyFromAssistantText(options: {
   threadRef: ScopedThreadRef;
@@ -485,20 +521,24 @@ export function syncDraftBodyFromAssistantText(options: {
   if (!match) return;
 
   const { campaign, draft } = match;
+  const nextProgress: DraftOutput["progress"] = options.streaming ? "generating" : "draft";
+
   if (draft.bodyIsManuallyEdited) {
-    if (draft.status === "generating" && !options.streaming) {
-      store.updateDraft(campaign.id, draft.id, { status: "draft" });
+    // The user owns the body. Still snap progress forward when a run
+    // finishes so badges (which derive from progress) stop showing
+    // "Generuji" after the AI is done.
+    if (draft.progress !== nextProgress) {
+      store.updateDraft(campaign.id, draft.id, { progress: nextProgress });
     }
     return;
   }
 
-  const nextStatus: DraftOutput["status"] = options.streaming ? "generating" : "draft";
-  if (draft.body === options.assistantText && draft.status === nextStatus) {
+  if (draft.body === options.assistantText && draft.progress === nextProgress) {
     return;
   }
   store.updateDraft(campaign.id, draft.id, {
     body: options.assistantText,
-    status: nextStatus,
+    progress: nextProgress,
   });
 }
 
@@ -506,32 +546,35 @@ export function saveDraftBody(
   campaignId: string,
   draftId: string,
   body: string,
-  options?: { status?: DraftOutput["status"] },
+  options?: { review?: DraftOutput["review"] },
 ): void {
   useCampaignStore.getState().updateDraft(campaignId, draftId, {
     body,
     bodyIsManuallyEdited: true,
-    ...(options?.status ? { status: options.status } : {}),
+    ...(options?.review !== undefined ? { review: options.review } : {}),
   });
 }
 
-export function setDraftStatus(
+/**
+ * Mark the body as "authored by AI" again (used by "Vrátit na verzi od AI"
+ * and by the follow-up confirmation flow). Clears `bodyIsManuallyEdited`
+ * and, when provided, writes a concrete body snapshot atomically.
+ */
+export function acceptAiAuthoredBody(campaignId: string, draftId: string, body?: string): void {
+  useCampaignStore.getState().updateDraft(campaignId, draftId, {
+    bodyIsManuallyEdited: false,
+    ...(body !== undefined ? { body } : {}),
+  });
+}
+
+export function setDraftReview(
   campaignId: string,
   draftId: string,
-  status: DraftOutput["status"],
+  review: DraftOutput["review"],
 ): void {
-  useCampaignStore.getState().updateDraft(campaignId, draftId, { status });
+  useCampaignStore.getState().updateDraft(campaignId, draftId, { review });
 }
 
 export function setCampaignStatus(campaignId: string, status: Campaign["status"]): void {
   useCampaignStore.getState().updateCampaign(campaignId, { status });
 }
-
-// --- Convenience ----------------------------------------------------------
-
-export function channelLabel(channel: string): string {
-  return getChannelLabel(channel);
-}
-
-// Re-export for consumers that want a one-stop import.
-export { CommandId, MessageId };

@@ -17,6 +17,39 @@ import { syncDraftBodyFromAssistantText } from "../campaignCommands";
 import { retainThreadDetailSubscription } from "../environments/runtime/service";
 import { useStore } from "../store";
 import { createThreadSelectorByRef } from "../storeSelectors";
+import type { Thread } from "../types";
+
+/**
+ * Pure sync decision — factored out of the React hook so it can be unit
+ * tested without mounting components. Returns the arguments that the hook
+ * would pass to `syncDraftBodyFromAssistantText`, or `null` when no sync
+ * should happen for this observed thread snapshot.
+ *
+ * The decision uses `thread.latestTurn` as the authoritative handle for
+ * "current turn's assistant reply". Scanning messages for the last
+ * assistant used to be the approach here, but that left a race window
+ * during regeneration where the *previous* turn's answer was briefly
+ * visible and got re-synced into the draft — undoing the reset. Using
+ * latestTurn.assistantMessageId eliminates that window entirely.
+ */
+export function computeDraftBodySync(
+  thread: Pick<Thread, "id" | "messages" | "latestTurn">,
+): { assistantText: string; streaming: boolean } | null {
+  const latestTurn = thread.latestTurn;
+  if (!latestTurn) return null;
+  const assistantMessageId = latestTurn.assistantMessageId;
+  if (!assistantMessageId) {
+    // Turn requested but the assistant hasn't materialised a message yet.
+    return null;
+  }
+  const assistantMessage = thread.messages.find((entry) => entry.id === assistantMessageId);
+  if (!assistantMessage) return null;
+
+  const streaming = latestTurn.state === "running";
+  if (assistantMessage.text.trim().length === 0 && streaming) return null;
+
+  return { assistantText: assistantMessage.text, streaming };
+}
 
 export function useDraftBodySync(threadRef: ScopedThreadRef | null | undefined): void {
   const environmentId = threadRef?.environmentId ?? null;
@@ -34,21 +67,12 @@ export function useDraftBodySync(threadRef: ScopedThreadRef | null | undefined):
 
   useEffect(() => {
     if (!thread || !environmentId) return;
-    let latestAssistant: { text: string; streaming: boolean } | null = null;
-    for (let index = thread.messages.length - 1; index >= 0; index -= 1) {
-      const message = thread.messages[index];
-      if (message && message.role === "assistant") {
-        latestAssistant = { text: message.text, streaming: message.streaming };
-        break;
-      }
-    }
-    if (!latestAssistant) return;
-    if (latestAssistant.text.trim().length === 0 && latestAssistant.streaming) return;
-
+    const decision = computeDraftBodySync(thread);
+    if (!decision) return;
     syncDraftBodyFromAssistantText({
       threadRef: { environmentId, threadId: thread.id },
-      assistantText: latestAssistant.text,
-      streaming: latestAssistant.streaming,
+      assistantText: decision.assistantText,
+      streaming: decision.streaming,
     });
   }, [thread, environmentId]);
 }
