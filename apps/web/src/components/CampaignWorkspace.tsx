@@ -20,7 +20,7 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import type { ProjectId } from "@t3tools/contracts";
+import type { ModelSelection, ProjectId } from "@t3tools/contracts";
 
 import {
   type Campaign,
@@ -36,6 +36,7 @@ import { useSettings } from "../hooks/useSettings";
 import { selectProjectsForEnvironment, useStore } from "../store";
 import { useUiStateStore } from "../uiStateStore";
 import { useDraftBodySync } from "../hooks/useDraftBodySync";
+import { CampaignModelPicker } from "./CampaignModelPicker";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { SidebarTrigger } from "./ui/sidebar";
@@ -161,6 +162,30 @@ function DraftCard({
             Reopen
           </Button>
         )}
+        {draft.modelOverride ? (
+          <div className="ms-auto min-w-0 shrink-0">
+            <CampaignModelPicker
+              value={draft.modelOverride}
+              onChange={(next) =>
+                useCampaignStore
+                  .getState()
+                  .updateDraft(campaign.id, draft.id, { modelOverride: next })
+              }
+              compact
+              disabled={isGenerating}
+            />
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="ms-auto text-[10px] text-muted-foreground"
+            onClick={onOpen}
+            title="Using the campaign default. Open the draft editor to pick a different model."
+          >
+            Model: default
+          </Button>
+        )}
       </footer>
     </article>
   );
@@ -209,12 +234,28 @@ function CampaignTechnicalInfo({ campaign }: { campaign: Campaign }) {
     ];
   }, [campaign]);
 
+  const draftModelRows = useMemo<Array<{ channel: string; label: string }>>(() => {
+    return campaign.drafts.map((draft) => ({
+      channel: draft.channel,
+      label: draft.modelOverride
+        ? `${formatModelSelection(draft.modelOverride)} (override)`
+        : `${formatModelSelection(campaign.modelSelection)} (default)`,
+    }));
+  }, [campaign]);
+
   const copyToClipboard = useCallback(() => {
-    const text = rows.map(([k, v]) => `${k}: ${v}`).join("\n");
+    const draftLines = draftModelRows.map(
+      (entry) => `  ${entry.channel.padEnd(14)} ${entry.label}`,
+    );
+    const text = [
+      ...rows.map(([k, v]) => `${k}: ${v}`),
+      "Draft models:",
+      ...draftLines,
+    ].join("\n");
     void navigator.clipboard.writeText(text).then(() => {
       toastManager.add({ type: "success", title: "Technical info copied to clipboard" });
     });
-  }, [rows]);
+  }, [rows, draftModelRows]);
 
   return (
     <details className="group rounded-xl border border-border/70 bg-background/40 text-[12px]">
@@ -247,6 +288,17 @@ function CampaignTechnicalInfo({ campaign }: { campaign: Campaign }) {
                 <span className="select-text break-all">
                   {draft.threadRef?.threadId ?? "—"}
                 </span>
+              </div>
+            ))}
+          </dd>
+          <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Draft models
+          </dt>
+          <dd className="space-y-0.5 font-mono text-[11px] text-foreground/80">
+            {draftModelRows.map((entry) => (
+              <div key={entry.channel} className="truncate">
+                <span className="inline-block w-20 opacity-70">{entry.channel}</span>
+                <span className="select-text break-all">{entry.label}</span>
               </div>
             ))}
           </dd>
@@ -302,11 +354,28 @@ export function CampaignWorkspace({ campaignId }: { campaignId: string }) {
       if (!campaign) return;
       setRegeneratingDraftId(draft.id);
       try {
-        const modelSelection = resolveAppModelSelectionState(settings, providers);
+        // When the draft has an override, pass it explicitly — this keeps
+        // `regenerateDraft`'s internal resolve consistent with what the
+        // Workspace shows in the DraftCard footer, even if the store was
+        // updated between the last render and the click. When the draft has
+        // no override, we deliberately omit `modelSelection` so the command
+        // falls back to the campaign default — passing the campaign default
+        // explicitly would trigger the auto-persist and turn "no override"
+        // into "override == campaign default", which is a no-op today but
+        // would mask the user's intent to keep following the campaign.
+        //
+        // If neither the draft nor the campaign has a model (older campaigns
+        // created before the snapshot was persisted), we compute an app-level
+        // default as a last-resort fallback.
+        const modelSelection: ModelSelection | undefined = draft.modelOverride
+          ? draft.modelOverride
+          : campaign.modelSelection
+            ? undefined
+            : resolveAppModelSelectionState(settings, providers);
         await regenerateDraft({
           campaignId,
           draftId: draft.id,
-          modelSelection,
+          ...(modelSelection ? { modelSelection } : {}),
           projectId: fallbackProjectId,
         });
       } catch (err) {

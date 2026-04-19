@@ -37,6 +37,18 @@ export interface DraftOutput {
   status: DraftOutputStatus;
   threadRef: ScopedThreadRef | null;
   updatedAt: string;
+  /**
+   * Per-draft model override. When set, regenerations for this draft use this
+   * `ModelSelection` instead of `Campaign.modelSelection`. Marketing uses this
+   * to experiment with different providers/models per channel inside a single
+   * campaign (e.g. Claude for newsletter, Codex for LinkedIn).
+   *
+   * - `undefined` — never set; regenerations fall back to `Campaign.modelSelection`.
+   * - `null`      — user explicitly reset back to the campaign default
+   *                 (persisted as `null` in localStorage so the intent survives a reload).
+   * - `ModelSelection` — the explicit per-draft choice.
+   */
+  modelOverride?: ModelSelection | null;
 }
 
 export interface Campaign {

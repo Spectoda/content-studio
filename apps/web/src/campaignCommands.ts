@@ -257,11 +257,68 @@ export interface RegenerateDraftInput {
   campaignId: string;
   draftId: string;
   feedback?: string | null;
-  modelSelection: ModelSelection;
+  /**
+   * Explicit model selection for this regeneration. When omitted we fall back
+   * to the per-draft `modelOverride`, then to the campaign default. When
+   * provided we auto-persist it as the new `modelOverride` so the next
+   * regeneration in the UI keeps the same choice without the caller having
+   * to pass it in again.
+   */
+  modelSelection?: ModelSelection;
   runtimeMode?: RuntimeMode;
   interactionMode?: ProviderInteractionMode;
   /** Used when the draft has no backing thread yet. */
   projectId?: ProjectId | null;
+}
+
+function resolveDraftModelSelection(
+  explicit: ModelSelection | undefined,
+  draft: Pick<DraftOutput, "modelOverride">,
+  campaign: Pick<Campaign, "modelSelection">,
+): ModelSelection {
+  const resolved = explicit ?? draft.modelOverride ?? campaign.modelSelection;
+  if (!resolved) {
+    throw new Error(
+      "No model available for this draft. Pick a model in the draft editor or set a campaign default.",
+    );
+  }
+  return resolved;
+}
+
+function modelSelectionsEqual(
+  a: ModelSelection | null | undefined,
+  b: ModelSelection | null | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+function persistDraftModelOverrideIfChanged(options: {
+  campaignId: string;
+  draftId: string;
+  picked: ModelSelection;
+  draft: Pick<DraftOutput, "modelOverride">;
+  campaign: Pick<Campaign, "modelSelection">;
+}): void {
+  const { picked, draft, campaign } = options;
+  // If the user's pick already matches the persisted override, nothing to do.
+  if (modelSelectionsEqual(picked, draft.modelOverride)) return;
+  // If the pick matches the campaign default, we interpret that as "follow
+  // the campaign" and clear the override (using `null` so the persisted
+  // intent survives a reload).
+  const store = useCampaignStore.getState();
+  if (modelSelectionsEqual(picked, campaign.modelSelection)) {
+    if (draft.modelOverride !== undefined && draft.modelOverride !== null) {
+      store.updateDraft(options.campaignId, options.draftId, { modelOverride: null });
+    }
+    return;
+  }
+  store.updateDraft(options.campaignId, options.draftId, { modelOverride: picked });
 }
 
 export async function regenerateDraft(input: RegenerateDraftInput): Promise<void> {
@@ -281,6 +338,24 @@ export async function regenerateDraft(input: RegenerateDraftInput): Promise<void
   }
 
   const api = requireEnvironmentApi(campaign.environmentId);
+
+  const modelSelection = resolveDraftModelSelection(input.modelSelection, draft, campaign);
+  // Auto-persist the explicit pick as the draft's override so the next run
+  // keeps using it — but only when it actually differs from what the draft
+  // would have resolved to without the override. That way:
+  //   • Picking a model matching the current override is a no-op.
+  //   • Picking a model matching the campaign default clears the override
+  //     (so the draft goes back to "follow the campaign").
+  //   • Picking anything else stores it as the new override.
+  if (input.modelSelection) {
+    persistDraftModelOverrideIfChanged({
+      campaignId: input.campaignId,
+      draftId: input.draftId,
+      picked: input.modelSelection,
+      draft,
+      campaign,
+    });
+  }
 
   const runtimeMode = input.runtimeMode ?? DEFAULT_RUNTIME_MODE;
   const interactionMode = input.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE;
@@ -317,7 +392,7 @@ export async function regenerateDraft(input: RegenerateDraftInput): Promise<void
       text: prompt,
       attachments: [],
     },
-    modelSelection: input.modelSelection,
+    modelSelection,
     titleSeed: title,
     runtimeMode,
     interactionMode,
@@ -327,7 +402,7 @@ export async function regenerateDraft(input: RegenerateDraftInput): Promise<void
             createThread: {
               projectId: input.projectId,
               title,
-              modelSelection: input.modelSelection,
+              modelSelection,
               runtimeMode,
               interactionMode,
               branch: null,
@@ -347,7 +422,12 @@ export async function sendFollowUpToDraftThread(input: {
   campaignId: string;
   draftId: string;
   message: string;
-  modelSelection: ModelSelection;
+  /**
+   * Same resolve order as `regenerateDraft`: explicit argument → per-draft
+   * `modelOverride` → `campaign.modelSelection`. Supplying it auto-persists
+   * as the draft's override.
+   */
+  modelSelection?: ModelSelection;
   runtimeMode?: RuntimeMode;
   interactionMode?: ProviderInteractionMode;
 }): Promise<void> {
@@ -361,6 +441,17 @@ export async function sendFollowUpToDraftThread(input: {
 
   const api = requireEnvironmentApi(campaign.environmentId);
 
+  const modelSelection = resolveDraftModelSelection(input.modelSelection, draft, campaign);
+  if (input.modelSelection) {
+    persistDraftModelOverrideIfChanged({
+      campaignId: input.campaignId,
+      draftId: input.draftId,
+      picked: input.modelSelection,
+      draft,
+      campaign,
+    });
+  }
+
   store.updateDraft(input.campaignId, input.draftId, { status: "generating" });
 
   await api.orchestration.dispatchCommand({
@@ -373,7 +464,7 @@ export async function sendFollowUpToDraftThread(input: {
       text: input.message,
       attachments: [],
     },
-    modelSelection: input.modelSelection,
+    modelSelection,
     runtimeMode: input.runtimeMode ?? DEFAULT_RUNTIME_MODE,
     interactionMode: input.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE,
     createdAt: new Date().toISOString(),

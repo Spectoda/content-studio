@@ -30,7 +30,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import type { ProjectId } from "@t3tools/contracts";
+import type { ModelSelection, ProjectId } from "@t3tools/contracts";
 
 import { getChannelConfig } from "../campaignChannels";
 import {
@@ -48,6 +48,7 @@ import { useServerProviders } from "../rpc/serverState";
 import { selectProjectsForEnvironment, useStore } from "../store";
 import { createThreadSelectorByRef } from "../storeSelectors";
 import { useUiStateStore } from "../uiStateStore";
+import { CampaignModelPicker } from "./CampaignModelPicker";
 import ChatMarkdown from "./ChatMarkdown";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -174,7 +175,13 @@ function DraftTechnicalInfo({
       ["Last updated", formatTimestamp(draft.updatedAt)],
       ["Thread ID", draft.threadRef?.threadId ?? "(not started)"],
       ["Environment", draft.threadRef?.environmentId ?? campaign.environmentId ?? "—"],
-      ["Model", formatModelSelection(campaign.modelSelection)],
+      [
+        "Model (this draft)",
+        draft.modelOverride
+          ? `${formatModelSelection(draft.modelOverride)} (override)`
+          : `${formatModelSelection(campaign.modelSelection)} (campaign default)`,
+      ],
+      ["Model (campaign default)", formatModelSelection(campaign.modelSelection)],
       ["Project", campaign.projectName ?? campaign.projectId ?? "—"],
       ["Project cwd", campaign.projectCwd ?? "—"],
       ["Manually edited", draft.bodyIsManuallyEdited ? "yes" : "no"],
@@ -277,6 +284,34 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
   const [feedback, setFeedback] = useState("");
   const [regenerating, setRegenerating] = useState(false);
   const [bodyViewMode, setBodyViewMode] = useState<BodyViewMode>(readInitialBodyViewMode);
+
+  // Per-draft model selection, seeded from the persisted override, then the
+  // campaign default, then the app default. Kept in local state so the user
+  // can try different picks in the picker before actually dispatching a run
+  // — we only write it back to the store when they click Regenerate (the
+  // auto-persist in `campaignCommands` handles that).
+  const [activeModelSelection, setActiveModelSelection] = useState<ModelSelection | null>(
+    () =>
+      draft?.modelOverride ??
+      campaign?.modelSelection ??
+      (providers.length > 0 ? resolveAppModelSelectionState(settings, providers) : null),
+  );
+
+  // When the store-side override changes (e.g. another tab / reset) sync the
+  // picker back to it — but don't clobber in-flight picks the user hasn't run
+  // yet. We detect "user has in-flight change" by comparing to the last known
+  // store value; here we simply refresh from store whenever the draft id or
+  // its persisted override changes.
+  useEffect(() => {
+    if (!draft || !campaign) return;
+    const next =
+      draft.modelOverride ??
+      campaign.modelSelection ??
+      (providers.length > 0 ? resolveAppModelSelectionState(settings, providers) : null);
+    setActiveModelSelection(next);
+    // Only re-run when the draft identity or its stored override changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft?.id, draft?.modelOverride, campaign?.modelSelection]);
   const handleBodyViewModeChange = useCallback((mode: BodyViewMode) => {
     setBodyViewMode(mode);
     try {
@@ -338,7 +373,8 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
     if (!campaign || !draft) return;
     setRegenerating(true);
     try {
-      const modelSelection = resolveAppModelSelectionState(settings, providers);
+      const modelSelection =
+        activeModelSelection ?? resolveAppModelSelectionState(settings, providers);
       await regenerateDraft({
         campaignId: campaign.id,
         draftId: draft.id,
@@ -356,7 +392,7 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
     } finally {
       setRegenerating(false);
     }
-  }, [campaign, draft, feedback, providers, settings, fallbackProjectId]);
+  }, [activeModelSelection, campaign, draft, feedback, providers, settings, fallbackProjectId]);
 
   const handleSendFollowUp = useCallback(async () => {
     if (!campaign || !draft) return;
@@ -364,7 +400,8 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
     if (trimmed.length === 0) return;
 
     try {
-      const modelSelection = resolveAppModelSelectionState(settings, providers);
+      const modelSelection =
+        activeModelSelection ?? resolveAppModelSelectionState(settings, providers);
       await sendFollowUpToDraftThread({
         campaignId: campaign.id,
         draftId: draft.id,
@@ -379,7 +416,16 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
         description: err instanceof Error ? err.message : "Unknown error.",
       });
     }
-  }, [campaign, draft, feedback, providers, settings]);
+  }, [activeModelSelection, campaign, draft, feedback, providers, settings]);
+
+  const handleResetModelToCampaignDefault = useCallback(() => {
+    if (!campaign || !draft) return;
+    const next =
+      campaign.modelSelection ??
+      (providers.length > 0 ? resolveAppModelSelectionState(settings, providers) : null);
+    setActiveModelSelection(next);
+    useCampaignStore.getState().updateDraft(campaign.id, draft.id, { modelOverride: null });
+  }, [campaign, draft, providers, settings]);
 
   const handleCopyBody = useCallback(() => {
     void navigator.clipboard.writeText(editorValue).then(() => {
@@ -579,6 +625,31 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
               className="w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-[12.5px] outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/25"
               placeholder="Shorter please, lead with the outcome… or any other change to apply on the next run."
             />
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="text-muted-foreground">Model:</span>
+              {activeModelSelection ? (
+                <CampaignModelPicker
+                  value={activeModelSelection}
+                  onChange={setActiveModelSelection}
+                  compact
+                  disabled={regenerating}
+                />
+              ) : (
+                <span className="italic text-muted-foreground">
+                  Loading providers…
+                </span>
+              )}
+              {draft.modelOverride && (
+                <button
+                  type="button"
+                  onClick={handleResetModelToCampaignDefault}
+                  className="text-[10px] text-muted-foreground underline hover:text-foreground"
+                  title="Drop the per-draft model and use the campaign default on the next run."
+                >
+                  Reset to campaign default
+                </button>
+              )}
+            </div>
             <div className="flex flex-wrap gap-1.5">
               <Button
                 size="sm"
@@ -611,7 +682,8 @@ export function CampaignDraftEditor({ campaignId, channel }: CampaignDraftEditor
             </div>
             <p className="text-[10px] text-muted-foreground">
               "Ask for tweak" sends the feedback as the next message on the same thread. Regenerate
-              asks for a fresh draft with the feedback applied.
+              asks for a fresh draft with the feedback applied. Picking a model here is remembered
+              for this draft until you reset.
             </p>
           </div>
         </section>
